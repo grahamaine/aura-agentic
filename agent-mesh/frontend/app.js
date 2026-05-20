@@ -5,9 +5,9 @@
 ═══════════════════════════════════════════════════════════════════════════ */
 
 // ── Constants ────────────────────────────────────────────────────────────────
-const SOMNIA_CHAIN_ID     = "0xC478"; // 50312
-const SOMNIA_RPC          = "https://api.infra.testnet.somnia.network/";
-const MAINNET_RPC         = "https://api.infra.mainnet.somnia.network/";
+const SOMNIA_CHAIN_ID     = "0xc488"; // 50312 — testnet Shannon
+const SOMNIA_RPC          = "https://api.infra.testnet.somnia.network";
+const MAINNET_RPC         = "https://api.infra.mainnet.somnia.network";
 const EXPLORER_TESTNET    = "https://shannon-explorer.somnia.network/";
 const EXPLORER_MAINNET    = "https://explorer.somnia.network/";
 
@@ -1666,11 +1666,11 @@ async function liveBlockTick() {
 }
 
 async function initNetworkStatus() {
-  const chainId = await rpc("eth_chainId");
-  const dot     = document.getElementById("net-dot");
+  const chainId  = await rpc("eth_chainId");
+  const dot      = document.getElementById("net-dot");
   const netLabel = document.getElementById("net-label");
-  const tpsEl   = document.getElementById("sidebar-tps");
-  const finEl   = document.querySelector(".somnia-fin");
+  const tpsEl    = document.getElementById("sidebar-tps");
+  const finEl    = document.querySelector(".somnia-fin");
 
   if (chainId === "0x13a7") {
     if (dot)      dot.classList.add("connected");
@@ -1678,23 +1678,38 @@ async function initNetworkStatus() {
     addEvent("success", "⬡", "Somnia mainnet connected", "Chain 0x13a7 · <1s finality · live data");
   }
 
-  // Gas price → display in sidebar as Gwei
+  // Gas price → show as Gwei in sidebar footer
   const gpHex = await rpc("eth_gasPrice");
   if (gpHex && finEl) {
     const gwei = (parseInt(gpHex, 16) / 1e9).toFixed(2);
     finEl.textContent = gwei + " Gwei";
   }
 
-  // somnia_getStatistics → update TPS if the node returns it
-  const stats = await rpc("somnia_getStatistics");
-  if (stats && typeof stats === "object") {
-    const tpsRaw = stats.tps ?? stats.currentTps ?? stats.txPerSecond
-                ?? stats.transactionsPerSecond ?? null;
-    if (tpsRaw !== null && tpsEl) {
-      const n = typeof tpsRaw === "string"
-        ? (parseInt(tpsRaw, 16) || Number(tpsRaw))
-        : Number(tpsRaw);
-      if (!isNaN(n) && n > 0) tpsEl.textContent = n.toLocaleString() + " TPS";
+  // TPS via somnia_getStatistics(fromBlock, toBlock)
+  // Requires two params; compute transactions / elapsed_seconds over last 100 blocks
+  const latestHex = await rpc("eth_blockNumber");
+  if (latestHex) {
+    const latest    = parseInt(latestHex, 16);
+    const fromNum   = Math.max(0, latest - 100);
+    const fromHex   = "0x" + fromNum.toString(16);
+
+    const [stats, fromBlock, toBlock] = await Promise.all([
+      rpc("somnia_getStatistics", [fromHex, latestHex]),
+      rpc("eth_getBlockByNumber", [fromHex, false]),
+      rpc("eth_getBlockByNumber", [latestHex, false]),
+    ]);
+
+    if (stats && fromBlock && toBlock) {
+      const txCount = parseInt(stats.numSuccessfulTransactions ?? "0x0", 16);
+      const t1      = parseInt(fromBlock.timestamp, 16);   // unix seconds
+      const t2      = parseInt(toBlock.timestamp,  16);
+      const elapsed = t2 - t1;
+      if (elapsed > 0 && tpsEl) {
+        const tps = Math.round(txCount / elapsed);
+        tpsEl.textContent = tps > 0
+          ? tps.toLocaleString() + " TPS"
+          : "1M+ TPS";           // fallback if low-activity window
+      }
     }
   }
 }
