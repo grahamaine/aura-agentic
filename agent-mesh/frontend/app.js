@@ -156,6 +156,26 @@ function renderDashboard(root) {
       ${statCard("Avg Quality",   avgQ + "/100", "⭐", "c-purple", "up", avgQ >= 75 ? "Good" : "Fair")}
     </div>
 
+    <!-- Network Intelligence -->
+    <div class="net-intel-grid" style="margin-bottom:16px">
+      <div class="net-intel-stat">
+        <div class="nis-val" style="color:var(--cyan)" id="ni-block">${state.blockNumber.toLocaleString()}</div>
+        <div class="nis-label">Current Block</div>
+      </div>
+      <div class="net-intel-stat">
+        <div class="nis-val" style="color:var(--green)" id="ni-tps">1M+ TPS</div>
+        <div class="nis-label">Network Throughput</div>
+      </div>
+      <div class="net-intel-stat">
+        <div class="nis-val" style="color:var(--indigo)">&lt; 1s</div>
+        <div class="nis-label">Avg Finality</div>
+      </div>
+      <div class="net-intel-stat">
+        <div class="nis-val" style="color:var(--yellow)">${(state.metrics.sttOut * 0.05).toFixed(4)}</div>
+        <div class="nis-label">Protocol Revenue (STT)</div>
+      </div>
+    </div>
+
     <!-- Main grid -->
     <div class="two-col" style="margin-bottom:16px;align-items:start">
       <!-- Agent Mesh Visualizer -->
@@ -373,23 +393,63 @@ function renderAgents(root) {
       ${filteredAgents().map(agentCardHTML).join("")}
     </div>
 
-    <!-- Divider -->
     <div class="divider" style="margin:24px 0"></div>
 
-    <!-- Capability distribution -->
-    <div class="card">
-      <div class="card-header"><h2>📊 Capability Distribution</h2></div>
-      <div class="card-body">
-        <div style="display:flex;flex-direction:column;gap:12px">
-          ${CAP_LABELS.map((lbl,i) => {
-            const count = state.agents.filter(a=>a.caps.includes(i)).length;
-            const pct = state.agents.length > 0 ? (count/state.agents.length)*100 : 0;
-            return `<div class="chart-bar-row">
-              <div class="chart-bar-label">${lbl}</div>
-              <div class="chart-bar-track"><div class="chart-bar-fill" style="width:${pct}%;background:${CAP_COLORS[i]}"></div></div>
-              <div class="chart-bar-value" style="color:${CAP_COLORS[i]}">${count}</div>
+    <!-- Two-col: Reputation Leaderboard + Capability Distribution -->
+    <div class="two-col" style="align-items:start;gap:18px">
+      <!-- Reputation Leaderboard -->
+      <div class="card">
+        <div class="card-header">
+          <h2>🏆 Reputation Leaderboard</h2>
+          <span style="font-size:0.68rem;color:var(--t2)">On-chain · updated per task</span>
+        </div>
+        <div class="card-body" style="padding:10px 14px">
+          ${[...state.agents].sort((a,b)=>b.rep-a.rep).map((ag,i) => {
+            const cap = ag.caps[0]??0;
+            const color = CAP_COLORS[cap];
+            const medals = ["🥇","🥈","🥉","4️⃣","5️⃣"];
+            const rankClass = i<3?`rank-${i+1}`:"";
+            const repPct = (ag.rep/1000)*100;
+            return `
+            <div class="rep-leader-row ${rankClass}" onclick="openAgentModal(state.agents.find(a=>a.id==='${ag.id}'))">
+              <div class="rr-medal">${medals[i]||i+1}</div>
+              <div class="rr-avatar" style="background:${CAP_BG[cap]};color:${color}">${AGENT_EMOJIS[cap]}</div>
+              <div class="rr-info">
+                <div class="rr-name">${ag.name}</div>
+                <div class="rr-caps">${ag.caps.map(c=>CAP_LABELS[c]).join(" · ")}</div>
+              </div>
+              <div class="rr-right">
+                <div class="rr-score" style="color:${color}">${ag.rep}<span style="font-size:0.62rem;color:var(--t2);font-weight:400">/1000</span></div>
+                <div class="rr-tasks">${ag.tasks} tasks</div>
+                <div class="rr-bar"><div class="rr-bar-fill" style="width:${repPct}%;background:${color}"></div></div>
+              </div>
             </div>`;
           }).join("")}
+        </div>
+      </div>
+
+      <!-- Capability Distribution -->
+      <div class="card">
+        <div class="card-header"><h2>📊 Capability Coverage</h2></div>
+        <div class="card-body">
+          <p style="font-size:0.72rem;color:var(--t2);margin-bottom:14px">
+            Agents cover ${new Set(state.agents.flatMap(a=>a.caps)).size} of ${CAP_LABELS.length} capabilities on the network.
+          </p>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            ${CAP_LABELS.map((lbl,i) => {
+              const agents = state.agents.filter(a=>a.caps.includes(i));
+              const count = agents.length;
+              const pct = state.agents.length > 0 ? (count/state.agents.length)*100 : 0;
+              return `<div>
+                <div class="chart-bar-row" style="margin-bottom:4px">
+                  <div class="chart-bar-label">${lbl}</div>
+                  <div class="chart-bar-track"><div class="chart-bar-fill" style="width:${pct}%;background:${CAP_COLORS[i]}"></div></div>
+                  <div class="chart-bar-value" style="color:${CAP_COLORS[i]}">${count}</div>
+                </div>
+                ${count>0?`<div style="display:flex;gap:4px;padding-left:90px">${agents.map(a=>`<span class="pill" style="background:${CAP_BG[i]};color:${CAP_COLORS[i]};font-size:0.56rem">${a.name.split("-")[0]}</span>`).join("")}</div>`:""}
+              </div>`;
+            }).join("")}
+          </div>
         </div>
       </div>
     </div>
@@ -549,104 +609,119 @@ function taskItemHTML(t) {
 }
 
 // ── PIPELINE view ──────────────────────────────────────────────────────────────
+const PL_SUBTASKS = [
+  { cap:0, title:"Research Somnia DeFi protocols",  agent:"Researcher-1", reward:"0.006", score:86, tx:"0x3f1a...b2c9" },
+  { cap:1, title:"Build TVL fetcher in Python",     agent:"Coder-1",      reward:"0.008", score:91, tx:"0x7e2d...4a1f" },
+  { cap:2, title:"Analyse yield opportunities",     agent:"Analyst-1",    reward:"0.004", score:82, tx:"0xc9b3...80e6" },
+];
+
 function renderPipeline(root) {
+  const s = state.pipelineStep;
   root.innerHTML = `
   <div class="view">
-    <div class="page-header">
-      <h1>Agent Pipeline — Task Decomposition</h1>
-      <p>Watch the OrchestratorAgent autonomously break complex tasks into specialist sub-tasks on Somnia</p>
+    <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
+      <div>
+        <h1>Agent Pipeline — Task Decomposition</h1>
+        <p>OrchestratorAgent autonomously decomposes tasks into parallel sub-tasks on Somnia</p>
+      </div>
+      <div style="display:flex;gap:8px;flex-shrink:0">
+        <button class="btn btn-primary" id="run-pipeline-btn" onclick="runDemoPipeline()" ${s>0&&s<6||state.pipelineRunning?"disabled":""}>
+          ${state.pipelineRunning?"⏳ Running...":"▶ Run Demo Pipeline"}
+        </button>
+        <button class="btn btn-secondary" onclick="resetPipeline()">↺ Reset</button>
+      </div>
     </div>
 
     <div class="two-col" style="align-items:start;gap:18px">
-      <!-- Pipeline visualizer -->
-      <div style="display:flex;flex-direction:column;gap:14px">
+      <!-- LEFT: Task flow DAG -->
+      <div style="display:flex;flex-direction:column;gap:12px">
+
+        <!-- Master Task Card -->
+        <div class="pipeline-task-card ${s>=1?'':'hidden'}" id="pl-task-card" style="${s>=1?'':'opacity:0;transform:translateY(10px)'}">
+          <div class="ptc-label">⬡ Master Task · Block #4,812,341</div>
+          <div class="ptc-title">Summarise Somnia DeFi Ecosystem — Comprehensive Report</div>
+          <div class="ptc-meta">
+            <span class="pill" style="background:rgba(236,72,153,.12);color:var(--pink)">Orchestration</span>
+            <span>Reward: <strong style="color:var(--cyan)">0.020 STT</strong></span>
+            <span>Escrowed in AgentVault</span>
+            <span style="font-family:var(--font-mono);font-size:0.62rem;color:var(--t3)">0xa1f2...c834</span>
+          </div>
+        </div>
+
+        <!-- Orchestrator node -->
         <div class="card">
-          <div class="card-header">
-            <h2>🎯 Task Flow</h2>
-            <div style="display:flex;gap:8px">
-              <button class="btn btn-primary" id="run-pipeline-btn" onclick="runDemoPipeline()" ${state.pipelineRunning?"disabled":""}>
-                ${state.pipelineRunning?"⏳ Running...":"▶ Run Demo Pipeline"}
-              </button>
-              <button class="btn btn-secondary" onclick="resetPipeline()">↺ Reset</button>
+          <div class="card-body" style="padding:14px">
+            <div style="display:flex;justify-content:center">
+              <div class="pipeline-node" style="max-width:200px">
+                <div class="pipeline-node-box ${s>=1?'active':''} ${s>=3?'completed':''}" id="pl-orch">
+                  <div class="pipeline-node-icon">🎯</div>
+                  <div class="pipeline-node-name">Orchestrator-1</div>
+                  <div class="pipeline-node-sub">${s>=3?'✓ Decomposed into 3 sub-tasks':'Task decomposition · Claude-powered'}</div>
+                  ${s>=2&&s<3?'<div class="pipeline-node-sub" style="color:var(--indigo);margin-top:4px">Calling claude-sonnet-4-6...</div>':''}
+                </div>
+              </div>
             </div>
           </div>
-          <div class="card-body">
-            <!-- Orchestrator at top -->
-            <div style="display:flex;justify-content:center;margin-bottom:0" id="pl-orch-row">
-              <div class="pipeline-node" style="max-width:180px">
-                <div class="pipeline-node-box ${state.pipelineStep>=1?'active':''} ${state.pipelineStep>=2?'completed':''}" id="pl-orch">
-                  <div class="pipeline-node-icon">🎯</div>
-                  <div class="pipeline-node-name">Orchestrator</div>
-                  <div class="pipeline-node-sub">Task decomposition</div>
-                </div>
-              </div>
-            </div>
+        </div>
 
-            <!-- Downward arrow -->
-            <div class="pipeline-arrow" id="pl-arrow1">
-              <div class="pipeline-arrow-line ${state.pipelineStep>=2?'flowing':''}" id="pl-line1"></div>
-              <div class="pipeline-arrow-head ${state.pipelineStep>=2?'active':''}" id="pl-head1"></div>
-            </div>
+        <!-- Arrow down -->
+        <div class="pipeline-arrow">
+          <div class="pipeline-arrow-line ${s>=2?'flowing':''}" id="pl-line1"></div>
+          <div class="pipeline-arrow-head ${s>=2?'active':''}" id="pl-head1"></div>
+        </div>
 
-            <!-- Specialists row -->
-            <div class="pipeline-row" id="pl-spec-row">
-              <div class="pipeline-node">
-                <div class="pipeline-node-box ${state.pipelineStep>=3?'active':''} ${state.pipelineStep>=4?'completed':''}" id="pl-n1">
-                  <div class="pipeline-node-icon">🔬</div>
-                  <div class="pipeline-node-name">Researcher</div>
-                  <div class="pipeline-node-sub">Web research</div>
-                </div>
-              </div>
-              <div class="pipeline-connector ${state.pipelineStep>=3?'flowing':''}"></div>
-              <div class="pipeline-node">
-                <div class="pipeline-node-box ${state.pipelineStep>=3?'active':''} ${state.pipelineStep>=4?'completed':''}" id="pl-n2">
-                  <div class="pipeline-node-icon">💻</div>
-                  <div class="pipeline-node-name">Coder</div>
-                  <div class="pipeline-node-sub">Code generation</div>
-                </div>
-              </div>
-              <div class="pipeline-connector ${state.pipelineStep>=3?'flowing':''}"></div>
-              <div class="pipeline-node">
-                <div class="pipeline-node-box ${state.pipelineStep>=3?'active':''} ${state.pipelineStep>=4?'completed':''}" id="pl-n3">
-                  <div class="pipeline-node-icon">📊</div>
-                  <div class="pipeline-node-name">Analyst</div>
-                  <div class="pipeline-node-sub">Data analysis</div>
-                </div>
-              </div>
-            </div>
+        <!-- Sub-task Cards Row -->
+        <div class="pipeline-subtasks-row" id="pl-spec-row">
+          ${PL_SUBTASKS.map((t,i) => `
+          <div class="subtask-dag-card ${s>=3?'revealed':''} ${s>=4?'done':''} ${s>=3&&s<4?'active':''}" id="pl-n${i+1}">
+            <div class="sdc-badge" style="background:${CAP_BG[t.cap]};color:${CAP_COLORS[t.cap]}">${CAP_LABELS[t.cap]}</div>
+            <div class="sdc-title">${t.title}</div>
+            <div class="sdc-agent">${AGENT_EMOJIS[t.cap]} ${t.agent}</div>
+            <div class="sdc-reward">${t.reward} STT</div>
+            ${s>=4?`<div class="sdc-score">⭐ Score: ${t.score}/100</div>`:'<div class="sdc-score" style="color:var(--t3)">${s>=3?"Executing...":""}</div>'}
+            <div class="sdc-tx">tx: ${t.tx}</div>
+          </div>`).join("")}
+        </div>
 
-            <!-- Downward arrow -->
-            <div class="pipeline-arrow" id="pl-arrow2">
-              <div class="pipeline-arrow-line ${state.pipelineStep>=4?'flowing':''}" id="pl-line2"></div>
-              <div class="pipeline-arrow-head ${state.pipelineStep>=4?'active':''}" id="pl-head2"></div>
-            </div>
+        <!-- Arrow down -->
+        <div class="pipeline-arrow">
+          <div class="pipeline-arrow-line ${s>=4?'flowing':''}" id="pl-line2"></div>
+          <div class="pipeline-arrow-head ${s>=4?'active':''}" id="pl-head2"></div>
+        </div>
 
-            <!-- Verifier -->
-            <div style="display:flex;justify-content:center" id="pl-ver-row">
-              <div class="pipeline-node" style="max-width:180px">
-                <div class="pipeline-node-box ${state.pipelineStep>=5?'active':''} ${state.pipelineStep>=6?'completed':''}" id="pl-ver">
-                  <div class="pipeline-node-icon">🛡️</div>
-                  <div class="pipeline-node-name">Verifier</div>
-                  <div class="pipeline-node-sub">AI quality scoring</div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Downward arrow -->
-            <div class="pipeline-arrow" id="pl-arrow3">
-              <div class="pipeline-arrow-line ${state.pipelineStep>=6?'flowing':''}" id="pl-line3"></div>
-              <div class="pipeline-arrow-head ${state.pipelineStep>=6?'active':''}" id="pl-head3"></div>
-            </div>
-
-            <!-- Payment -->
+        <!-- Verifier node -->
+        <div class="card">
+          <div class="card-body" style="padding:14px">
             <div style="display:flex;justify-content:center">
-              <div class="pipeline-node" style="max-width:180px">
-                <div class="pipeline-node-box ${state.pipelineStep>=6?'completed':''}" id="pl-pay">
-                  <div class="pipeline-node-icon">💎</div>
-                  <div class="pipeline-node-name">Payment Released</div>
-                  <div class="pipeline-node-sub">Atomic on Somnia</div>
+              <div class="pipeline-node" style="max-width:200px">
+                <div class="pipeline-node-box ${s>=5?'active':''} ${s>=6?'completed':''}" id="pl-ver">
+                  <div class="pipeline-node-icon">🛡️</div>
+                  <div class="pipeline-node-name">Verifier-1</div>
+                  <div class="pipeline-node-sub">${s>=6?'✓ All 3 results scored':'AI quality scoring · claude-sonnet-4-6'}</div>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Arrow down -->
+        <div class="pipeline-arrow">
+          <div class="pipeline-arrow-line ${s>=6?'flowing':''}" id="pl-line3"></div>
+          <div class="pipeline-arrow-head ${s>=6?'active':''}" id="pl-head3"></div>
+        </div>
+
+        <!-- Payment split viz -->
+        <div class="card payment-split-viz ${s>=6?'revealed':''}" id="pl-pay">
+          <div class="card-header">
+            <h2>💎 Payment Released — AgentVault</h2>
+            ${s>=6?'<span class="pill" style="background:rgba(34,197,94,.12);color:var(--green)">Atomic on Somnia</span>':''}
+          </div>
+          <div class="card-body">
+            ${plPayRow("Specialists (85%)", "var(--cyan)",   85, "0.017 STT")}
+            ${plPayRow("Verifier-1 (10%)",  "var(--purple)", 10, "0.002 STT")}
+            ${plPayRow("Protocol fee (5%)", "var(--yellow)",  5, "0.001 STT")}
+            <div style="font-size:0.66rem;color:var(--t3);margin-top:8px">
+              All splits executed atomically · Block #4,812,352 · 3 tx
             </div>
           </div>
         </div>
@@ -659,27 +734,35 @@ function renderPipeline(root) {
               ${chainStat("TPS Capacity","1,000,000+","var(--cyan)")}
               ${chainStat("Finality","< 1 second","var(--green)")}
               ${chainStat("Chain ID","50312 (testnet)","var(--indigo)")}
-              ${chainStat("Token","STT / SOMI","var(--yellow)")}
+              ${chainStat("Token","STT","var(--yellow)")}
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Pipeline log -->
+      <!-- RIGHT: Execution log -->
       <div class="card" style="position:sticky;top:70px">
         <div class="card-header">
           <h2>📜 Execution Log</h2>
-          <span style="font-size:0.68rem;color:var(--t2)">Step ${state.pipelineStep}/6</span>
+          <span style="font-size:0.68rem;color:var(--t2)">Step ${s}/6 ${s===6?'· ✅ Complete':''}</span>
         </div>
         <div class="card-body" style="padding:0">
-          <div class="subtask-output" id="pipeline-log" style="height:480px;border-radius:0 0 var(--r-lg) var(--r-lg);border:none">
+          <div class="subtask-output" id="pipeline-log" style="height:560px;border-radius:0 0 var(--r-lg) var(--r-lg);border:none">
 ${state.pipelineLog.length===0
-  ? '<span style="color:var(--t3)">Click "Run Demo Pipeline" to start...\n\nThis will simulate:\n  1. Orchestrator picks up complex task\n  2. Claude decomposes it into 3 sub-tasks\n  3. Sub-tasks posted on Somnia (reactive events)\n  4. Specialist agents bid and execute\n  5. Verifier scores with AI (on-chain)\n  6. Payment released atomically\n\nAll coordination is on-chain.</span>'
+  ? '<span style="color:var(--t3)">Click "Run Demo Pipeline" to start...\n\nThis simulates the full on-chain lifecycle:\n  1. User posts task → escrowed in AgentVault\n  2. Orchestrator bids, gets assigned\n  3. Claude decomposes into 3 sub-tasks\n  4. Sub-tasks posted on Somnia chain\n  5. Researcher, Coder, Analyst execute in parallel\n  6. Verifier scores with Claude (on-chain)\n  7. AgentVault releases payment: 85/10/5 split\n\n0 human actions required.</span>'
   : state.pipelineLog.join("\n")}
           </div>
         </div>
       </div>
     </div>
+  </div>`;
+}
+
+function plPayRow(label, color, pct, amount) {
+  return `<div class="psv-row">
+    <div class="psv-label">${label}</div>
+    <div class="psv-track"><div class="psv-fill" style="width:${pct}%;background:${color}"></div></div>
+    <div class="psv-val" style="color:${color}">${amount}</div>
   </div>`;
 }
 
@@ -708,55 +791,77 @@ async function runDemoPipeline() {
   renderPipeline(document.getElementById("content"));
 
   for (let i = 0; i < PIPELINE_STEPS.length; i++) {
-    const step = PIPELINE_STEPS[i];
     await sleep(i === 0 ? 0 : PIPELINE_STEPS[i].delay - PIPELINE_STEPS[i-1].delay);
     state.pipelineStep = i + 1;
-    state.pipelineLog.push(...step.log, "");
+    state.pipelineLog.push(...PIPELINE_STEPS[i].log, "");
     updatePipelineUI();
-    toast("info", `Step ${i+1}/6`, step.log[0].replace(/<[^>]+>/g,"").replace("// ",""));
+    toast("info", `Step ${i+1}/6`, PIPELINE_STEPS[i].log[0].replace(/<[^>]+>/g,"").replace("// ",""));
   }
 
   state.pipelineRunning = false;
-  addEvent("success","⬡","Pipeline complete","6-step autonomous task pipeline ran with 0 human actions");
+  addEvent("success","⬡","Pipeline complete","6-step autonomous pipeline · 0 human actions required");
 }
 
 function updatePipelineUI() {
+  const s = state.pipelineStep;
+
+  // Execution log
   const logEl = document.getElementById("pipeline-log");
-  if (logEl) {
-    logEl.innerHTML = state.pipelineLog.join("\n");
-    logEl.scrollTop = logEl.scrollHeight;
-  }
+  if (logEl) { logEl.innerHTML = state.pipelineLog.join("\n"); logEl.scrollTop = logEl.scrollHeight; }
+
+  // Step counter + button
   const btn = document.getElementById("run-pipeline-btn");
-  if (btn) {
-    btn.disabled = state.pipelineRunning;
-    btn.textContent = state.pipelineRunning ? "⏳ Running..." : "▶ Run Demo Pipeline";
+  if (btn) { btn.disabled = state.pipelineRunning; btn.textContent = state.pipelineRunning ? "⏳ Running..." : "▶ Run Demo Pipeline"; }
+
+  // Master task card
+  const taskCard = document.getElementById("pl-task-card");
+  if (taskCard) {
+    if (s >= 1) { taskCard.classList.remove("hidden"); taskCard.style.opacity="1"; taskCard.style.transform="translateY(0)"; taskCard.style.transition="opacity .4s,transform .4s"; }
   }
-  // Update node boxes
-  const nodeMap = [
-    {id:"pl-orch", activeFrom:1, completeFrom:2},
-    {id:"pl-n1",   activeFrom:3, completeFrom:4},
-    {id:"pl-n2",   activeFrom:3, completeFrom:4},
-    {id:"pl-n3",   activeFrom:3, completeFrom:4},
-    {id:"pl-ver",  activeFrom:5, completeFrom:6},
-    {id:"pl-pay",  activeFrom:6, completeFrom:7},
-  ];
-  nodeMap.forEach(({id, activeFrom, completeFrom}) => {
-    const el = document.getElementById(id);
+
+  // Orchestrator node box
+  const orch = document.getElementById("pl-orch");
+  if (orch) {
+    orch.classList.toggle("active",    s >= 1 && s < 3);
+    orch.classList.toggle("completed", s >= 3);
+    const sub = orch.querySelector(".pipeline-node-sub");
+    if (sub) sub.textContent = s >= 3 ? "✓ Decomposed into 3 sub-tasks" : s >= 2 ? "Calling claude-sonnet-4-6..." : "Task decomposition · Claude-powered";
+  }
+
+  // Arrow lines/heads
+  [["pl-line1","pl-head1", 2], ["pl-line2","pl-head2", 4], ["pl-line3","pl-head3", 6]].forEach(([lid, hid, from]) => {
+    const l = document.getElementById(lid), h = document.getElementById(hid);
+    if (l) l.classList.toggle("flowing", s >= from);
+    if (h) h.classList.toggle("active",  s >= from);
+  });
+
+  // Subtask DAG cards
+  [1,2,3].forEach(i => {
+    const el = document.getElementById(`pl-n${i}`);
     if (!el) return;
-    el.classList.toggle("active",    state.pipelineStep >= activeFrom && state.pipelineStep < completeFrom);
-    el.classList.toggle("completed", state.pipelineStep >= completeFrom);
+    el.classList.toggle("revealed", s >= 3);
+    el.classList.toggle("active",   s >= 3 && s < 4);
+    el.classList.toggle("done",     s >= 4);
+    const scoreEl = el.querySelector(".sdc-score");
+    if (scoreEl) {
+      if (s >= 4) { scoreEl.style.color = "var(--green)"; scoreEl.textContent = `⭐ Score: ${PL_SUBTASKS[i-1].score}/100`; }
+      else if (s >= 3) { scoreEl.style.color = "var(--t3)"; scoreEl.textContent = "Executing..."; }
+      else { scoreEl.textContent = ""; }
+    }
   });
-  ["pl-line1","pl-line2","pl-line3"].forEach((id, i) => {
-    const el = document.getElementById(id);
-    if (el) el.classList.toggle("flowing", state.pipelineStep >= i*2+2);
-  });
-  ["pl-head1","pl-head2","pl-head3"].forEach((id, i) => {
-    const el = document.getElementById(id);
-    if (el) el.classList.toggle("active", state.pipelineStep >= i*2+2);
-  });
-  document.querySelectorAll(".pipeline-connector").forEach(el => {
-    el.classList.toggle("flowing", state.pipelineStep >= 3);
-  });
+
+  // Verifier node box
+  const ver = document.getElementById("pl-ver");
+  if (ver) {
+    ver.classList.toggle("active",    s >= 5 && s < 6);
+    ver.classList.toggle("completed", s >= 6);
+    const sub = ver.querySelector(".pipeline-node-sub");
+    if (sub) sub.textContent = s >= 6 ? "✓ All 3 results scored" : "AI quality scoring · claude-sonnet-4-6";
+  }
+
+  // Payment split card
+  const pay = document.getElementById("pl-pay");
+  if (pay) pay.classList.toggle("revealed", s >= 6);
 }
 
 function resetPipeline() {
@@ -1685,6 +1790,9 @@ async function rpc(method, params = [], url = MAINNET_RPC) {
 async function liveBlockTick() {
   const hex = await rpc("eth_blockNumber");
   if (hex) {
+    // also update the dashboard Network Intelligence panel if visible
+    const niEl = document.getElementById("ni-block");
+    if (niEl) niEl.textContent = parseInt(hex, 16).toLocaleString();
     state.blockNumber = parseInt(hex, 16);
   } else {
     state.blockNumber += 1 + Math.floor(Math.random() * 3);
@@ -1734,9 +1842,10 @@ async function initNetworkStatus() {
       const elapsed = t2 - t1;
       if (elapsed > 0 && tpsEl) {
         const tps = Math.round(txCount / elapsed);
-        tpsEl.textContent = tps > 0
-          ? tps.toLocaleString() + " TPS"
-          : "1M+ TPS";           // fallback if low-activity window
+        const tpsText = tps > 0 ? tps.toLocaleString() + " TPS" : "1M+ TPS";
+        tpsEl.textContent = tpsText;
+        const niTps = document.getElementById("ni-tps");
+        if (niTps) niTps.textContent = tpsText;
       }
     }
   }

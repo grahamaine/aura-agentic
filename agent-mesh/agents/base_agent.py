@@ -187,19 +187,39 @@ class BaseAgent(ABC):
 
     # ── On-chain helpers ───────────────────────────────────────────────────
 
+    async def _retry(self, coro_fn, max_attempts: int = 3, base_delay: float = 1.0):
+        """Retry an async callable with exponential backoff."""
+        last_exc: Optional[Exception] = None
+        for attempt in range(max_attempts):
+            try:
+                return await coro_fn()
+            except Exception as exc:
+                last_exc = exc
+                if attempt < max_attempts - 1:
+                    delay = base_delay * (2 ** attempt)
+                    self.log.warning(
+                        f"Attempt {attempt + 1}/{max_attempts} failed: {exc}. "
+                        f"Retrying in {delay:.1f}s"
+                    )
+                    await asyncio.sleep(delay)
+        raise RuntimeError(f"All {max_attempts} attempts failed") from last_exc
+
     async def _send_tx(self, fn, value_wei: int = 0) -> str:
-        nonce = await self.w3.eth.get_transaction_count(self.address)
-        gas_price = await self.w3.eth.gas_price
-        tx = fn.build_transaction({
-            "from": self.address,
-            "nonce": nonce,
-            "gasPrice": gas_price,
-            "value": value_wei,
-        })
-        signed = self.account.sign_transaction(tx)
-        tx_hash = await self.w3.eth.send_raw_transaction(signed.raw_transaction)
-        receipt = await self.w3.eth.wait_for_transaction_receipt(tx_hash)
-        return receipt["transactionHash"].hex()
+        async def _attempt():
+            nonce = await self.w3.eth.get_transaction_count(self.address)
+            gas_price = await self.w3.eth.gas_price
+            tx = fn.build_transaction({
+                "from": self.address,
+                "nonce": nonce,
+                "gasPrice": gas_price,
+                "value": value_wei,
+            })
+            signed = self.account.sign_transaction(tx)
+            tx_hash = await self.w3.eth.send_raw_transaction(signed.raw_transaction)
+            receipt = await self.w3.eth.wait_for_transaction_receipt(tx_hash, timeout=60)
+            return receipt["transactionHash"].hex()
+
+        return await self._retry(_attempt)
 
     async def register_on_chain(self):
         assert self._registry is not None, "call setup_contracts() first"
@@ -241,7 +261,7 @@ class BaseAgent(ABC):
     # ── Claude inference ───────────────────────────────────────────────────
 
     def think(self, system: str, user_msg: str, max_tokens: int = 4096) -> str:
-        """Synchronous Claude call — use in executor threads."""
+        """Synchronous Claude call — run in executor threads to avoid blocking the loop."""
         resp = self.claude.messages.create(
             model=self.config.claude_model,
             max_tokens=max_tokens,
@@ -250,6 +270,11 @@ class BaseAgent(ABC):
         )
         block = next((b for b in resp.content if isinstance(b, TextBlock)), None)
         return block.text if block else ""
+
+    async def think_async(self, system: str, user_msg: str, max_tokens: int = 4096) -> str:
+        """Non-blocking Claude call — runs think() in the default executor."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self.think, system, user_msg, max_tokens)
 
     # ── Main loop ──────────────────────────────────────────────────────────
 
@@ -281,8 +306,10 @@ class BaseAgent(ABC):
                 # Also check assigned tasks we need to execute
                 await self._check_assigned_tasks()
 
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
-                self.log.error(f"Loop error: {e}")
+                self.log.error(f"Loop error: {e}", exc_info=True)
 
             await asyncio.sleep(self.config.poll_interval)
 

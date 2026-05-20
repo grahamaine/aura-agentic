@@ -1247,6 +1247,98 @@ body {
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--t3); }
 
+/* ── Pipeline Subtask Cards ────────────────────────────────────────────── */
+.pipeline-task-card {
+  background: var(--bg3);
+  border: 1px solid rgba(236,72,153,0.5);
+  border-radius: var(--r-md);
+  padding: 12px 16px;
+  box-shadow: 0 0 16px rgba(236,72,153,0.08);
+}
+.ptc-label { font-size: 0.6rem; color: var(--pink); font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px; }
+.ptc-title { font-size: 0.88rem; font-weight: 700; margin-bottom: 8px; }
+.ptc-meta  { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; font-size: 0.68rem; color: var(--t2); }
+
+.pipeline-subtasks-row {
+  display: flex;
+  gap: 8px;
+}
+.subtask-dag-card {
+  flex: 1;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 10px;
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 0.4s ease, transform 0.4s ease, border-color 0.3s, box-shadow 0.3s;
+}
+.subtask-dag-card.revealed { opacity: 1; transform: translateY(0); }
+.subtask-dag-card.done { border-color: var(--green); box-shadow: 0 0 8px rgba(34,197,94,0.12); }
+.subtask-dag-card.active { border-color: var(--indigo); box-shadow: 0 0 10px rgba(108,99,255,0.15); }
+.sdc-badge   { font-size: 0.58rem; font-weight: 700; padding: 2px 7px; border-radius: 20px; display: inline-block; margin-bottom: 6px; }
+.sdc-title   { font-size: 0.7rem; font-weight: 600; margin-bottom: 6px; line-height: 1.3; }
+.sdc-agent   { font-size: 0.63rem; color: var(--t2); margin-bottom: 4px; }
+.sdc-reward  { font-size: 0.75rem; font-weight: 700; color: var(--cyan); margin-bottom: 4px; }
+.sdc-score   { font-size: 0.63rem; color: var(--green); font-weight: 600; margin-bottom: 3px; }
+.sdc-tx      { font-size: 0.56rem; color: var(--t3); font-family: var(--font-mono); }
+
+.payment-split-viz {
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 0.5s ease 0.1s, transform 0.5s ease 0.1s;
+}
+.payment-split-viz.revealed { opacity: 1; transform: translateY(0); }
+.psv-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 0.7rem; }
+.psv-label { width: 100px; color: var(--t2); font-size: 0.66rem; flex-shrink: 0; }
+.psv-track { flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+.psv-fill  { height: 100%; border-radius: 3px; transition: width 1s cubic-bezier(0.4,0,0.2,1); }
+.psv-val   { width: 70px; text-align: right; font-weight: 700; font-size: 0.68rem; flex-shrink: 0; }
+
+/* ── Reputation Leaderboard ─────────────────────────────────────────────── */
+.rep-leader-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--border);
+  margin-bottom: 6px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+.rep-leader-row:hover { border-color: var(--border2); background: var(--bg3); }
+.rep-leader-row.rank-1 { border-color: rgba(251,191,36,0.45); background: rgba(251,191,36,0.03); }
+.rep-leader-row.rank-2 { border-color: rgba(148,163,184,0.45); background: rgba(148,163,184,0.03); }
+.rep-leader-row.rank-3 { border-color: rgba(180,120,60,0.45);  background: rgba(180,120,60,0.03); }
+.rr-medal  { font-size: 1.1rem; width: 26px; flex-shrink: 0; text-align: center; }
+.rr-avatar { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.95rem; flex-shrink: 0; }
+.rr-info   { flex: 1; min-width: 0; }
+.rr-name   { font-size: 0.8rem; font-weight: 700; }
+.rr-caps   { font-size: 0.62rem; color: var(--t2); margin-top: 2px; }
+.rr-right  { text-align: right; flex-shrink: 0; }
+.rr-score  { font-size: 0.88rem; font-weight: 800; }
+.rr-tasks  { font-size: 0.62rem; color: var(--t2); margin-top: 2px; }
+.rr-bar    { width: 48px; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; margin-top: 4px; margin-left: auto; }
+.rr-bar-fill { height: 100%; border-radius: 2px; }
+
+/* ── Network Intelligence ───────────────────────────────────────────────── */
+.net-intel-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.net-intel-stat {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 10px 12px;
+  text-align: center;
+}
+.nis-val   { font-size: 0.9rem; font-weight: 800; margin-bottom: 2px; }
+.nis-label { font-size: 0.6rem; color: var(--t2); }
+
 /* ── Responsive ────────────────────────────────────────────────────────── */
 @media (max-width: 1100px) {
   .grid-4 { grid-template-columns: repeat(2, 1fr); }
