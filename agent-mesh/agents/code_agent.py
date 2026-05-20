@@ -38,6 +38,7 @@ class CodeAgent(BaseAgent):
         config.capabilities = [Capability.CodeGen]
         super().__init__(config)
         self._active_tasks: set[int] = set()
+        self._failed_tasks: set[int] = set()
 
     async def execute_task(self, task: dict) -> str:
         self.log.info(f"Coding task: {task['title']}")
@@ -55,7 +56,7 @@ class CodeAgent(BaseAgent):
             expected_output=input_data.get("expected_output", "Complete implementation"),
         )
 
-        result = self.think(SYSTEM_PROMPT, prompt, max_tokens=8192)
+        result = await self.think_async(SYSTEM_PROMPT, prompt, max_tokens=8192)
         self.stats["tasks_completed"] += 1
         return result
 
@@ -63,7 +64,7 @@ class CodeAgent(BaseAgent):
         try:
             count = await self._market.functions.taskCount().call()
             for tid in range(1, count + 1):
-                if tid in self._active_tasks:
+                if tid in self._active_tasks or tid in self._failed_tasks:
                     continue
                 t = await self.get_task(tid)
                 if (t["assignedAgent"].lower() == self.address.lower() and
@@ -75,13 +76,11 @@ class CodeAgent(BaseAgent):
 
     async def _run_task(self, task_id: int, task: dict):
         try:
-            loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(None, lambda: self.execute_task(task))
-            if asyncio.iscoroutine(result):
-                result = await result
+            result = await self.execute_task(task)
             result_hash = json.dumps({"result": result[:3000], "agent": self.address, "type": "code"})
             await self.submit_result(task_id, result_hash)
+            self._active_tasks.discard(task_id)
         except Exception as e:
             self.log.error(f"Task #{task_id} failed: {e}")
-        finally:
             self._active_tasks.discard(task_id)
+            self._failed_tasks.add(task_id)

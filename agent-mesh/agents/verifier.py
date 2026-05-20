@@ -51,6 +51,7 @@ class VerifierAgent(BaseAgent):
         config.capabilities = [Capability.Verification]
         super().__init__(config)
         self._verified: set[int] = set()
+        self._failed: set[int] = set()
 
     async def execute_task(self, task: dict) -> str:
         # Verifier doesn't execute tasks — it verifies them
@@ -58,12 +59,16 @@ class VerifierAgent(BaseAgent):
 
     async def run(self):
         """Override run: watch for PendingVerification tasks."""
+        assert self._market is not None, "call setup_contracts() first"
         self._running = True
         self.log.info(f"VerifierAgent starting — wallet {self.address}")
+        await self._ensure_registered()
 
         while self._running:
             try:
                 await self._scan_for_pending()
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 self.log.error(f"Verifier loop error: {e}")
             await asyncio.sleep(self.config.poll_interval)
@@ -71,7 +76,7 @@ class VerifierAgent(BaseAgent):
     async def _scan_for_pending(self):
         count = await self._market.functions.taskCount().call()
         for tid in range(1, count + 1):
-            if tid in self._verified:
+            if tid in self._verified or tid in self._failed:
                 continue
             t = await self.get_task(tid)
             if t["status"] == int(TaskStatus.PendingVerification):
@@ -100,6 +105,8 @@ class VerifierAgent(BaseAgent):
             self.log.info(f"Verification submitted: {tx}")
         except Exception as e:
             self.log.error(f"verifyAndPay failed for #{task_id}: {e}")
+            self._failed.add(task_id)
+            self._verified.discard(task_id)
 
     def _score(self, task: dict, result: str) -> tuple[int, str]:
         if not result.strip():
