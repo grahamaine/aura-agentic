@@ -1640,6 +1640,65 @@ function renderPortfolio(root) {
   </div>`;
 }
 
+// ── Live Somnia RPC ────────────────────────────────────────────────────────────
+async function rpc(method, params = [], url = MAINNET_RPC) {
+  try {
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+    });
+    if (!r.ok) return null;
+    const j = await r.json();
+    return j.result ?? null;
+  } catch { return null; }
+}
+
+async function liveBlockTick() {
+  const hex = await rpc("eth_blockNumber");
+  if (hex) {
+    state.blockNumber = parseInt(hex, 16);
+  } else {
+    state.blockNumber += 1 + Math.floor(Math.random() * 3);
+  }
+  const el = document.getElementById("block-num");
+  if (el) el.textContent = state.blockNumber.toLocaleString();
+}
+
+async function initNetworkStatus() {
+  const chainId = await rpc("eth_chainId");
+  const dot     = document.getElementById("net-dot");
+  const netLabel = document.getElementById("net-label");
+  const tpsEl   = document.getElementById("sidebar-tps");
+  const finEl   = document.querySelector(".somnia-fin");
+
+  if (chainId === "0x13a7") {
+    if (dot)      dot.classList.add("connected");
+    if (netLabel) netLabel.textContent = "Somnia Mainnet";
+    addEvent("success", "⬡", "Somnia mainnet connected", "Chain 0x13a7 · <1s finality · live data");
+  }
+
+  // Gas price → display in sidebar as Gwei
+  const gpHex = await rpc("eth_gasPrice");
+  if (gpHex && finEl) {
+    const gwei = (parseInt(gpHex, 16) / 1e9).toFixed(2);
+    finEl.textContent = gwei + " Gwei";
+  }
+
+  // somnia_getStatistics → update TPS if the node returns it
+  const stats = await rpc("somnia_getStatistics");
+  if (stats && typeof stats === "object") {
+    const tpsRaw = stats.tps ?? stats.currentTps ?? stats.txPerSecond
+                ?? stats.transactionsPerSecond ?? null;
+    if (tpsRaw !== null && tpsEl) {
+      const n = typeof tpsRaw === "string"
+        ? (parseInt(tpsRaw, 16) || Number(tpsRaw))
+        : Number(tpsRaw);
+      if (!isNaN(n) && n > 0) tpsEl.textContent = n.toLocaleString() + " TPS";
+    }
+  }
+}
+
 // ── Boot ───────────────────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
   seedDemo();
@@ -1677,8 +1736,12 @@ document.addEventListener("DOMContentLoaded", () => {
   navigate("dashboard");
   updateBadges();
 
-  // Block ticker (Somnia produces blocks fast)
-  setInterval(tickBlock, 800);
+  // Live block polling from Somnia mainnet (falls back to simulation if offline)
+  liveBlockTick();
+  setInterval(liveBlockTick, 1000);
+
+  // Connect to Somnia mainnet RPC for network stats
+  initNetworkStatus();
 
   // Auto-spawn tasks every 20s in demo mode
   setInterval(() => { if (state.demoMode) autoSpawnTasks(); }, 20000);
