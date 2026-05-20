@@ -1134,6 +1134,35 @@ function updateBadges() {
 }
 
 // ── Wallet ─────────────────────────────────────────────────────────────────────
+const WALLET_SVG = `<svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z"/><path fill-rule="evenodd" d="M18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z" clip-rule="evenodd"/></svg>`;
+
+function setWalletConnected(address) {
+  const btn = document.getElementById("wallet-btn");
+  if (!btn) return;
+  btn.classList.add("connected");
+  btn.innerHTML = `${WALLET_SVG}
+    <span class="wallet-addr">${address.slice(0,8)}...${address.slice(-4)}</span>
+    <span class="wallet-disconnect" onclick="event.stopPropagation();disconnectWallet()" title="Disconnect wallet">✕</span>`;
+}
+
+function setWalletDisconnected() {
+  const btn = document.getElementById("wallet-btn");
+  if (!btn) return;
+  btn.classList.remove("connected");
+  btn.innerHTML = `${WALLET_SVG}<span id="wallet-label">Connect Wallet</span>`;
+}
+
+function disconnectWallet() {
+  state.wallet = null;
+  setWalletDisconnected();
+  const dot = document.getElementById("net-dot");
+  if (dot) dot.classList.remove("connected");
+  const label = document.getElementById("net-label");
+  if (label) label.textContent = "Demo Mode";
+  toast("info", "Wallet Disconnected", "Disconnected from Somnia Testnet");
+  addEvent("info", "🔌", "Wallet disconnected", "");
+}
+
 async function connectWallet() {
   if (!window.ethereum) { toast("warn","No Wallet","Install MetaMask to connect"); return; }
   try {
@@ -1153,8 +1182,7 @@ async function connectWallet() {
     }
     const accounts = await window.ethereum.request({method:"eth_accounts"});
     state.wallet = accounts[0];
-    const btn = document.getElementById("wallet-btn");
-    if (btn) { btn.classList.add("connected"); btn.querySelector("span").textContent = state.wallet.slice(0,8)+"..."+state.wallet.slice(-4); }
+    setWalletConnected(state.wallet);
     const dot = document.getElementById("net-dot");
     if (dot) dot.classList.add("connected");
     document.getElementById("net-label").textContent = "Somnia Testnet";
@@ -1723,8 +1751,10 @@ document.addEventListener("DOMContentLoaded", () => {
     btn.addEventListener("click", () => navigate(btn.dataset.view));
   });
 
-  // Wallet
-  document.getElementById("wallet-btn").addEventListener("click", connectWallet);
+  // Wallet — only trigger connect when not already connected (disconnect uses inline onclick)
+  document.getElementById("wallet-btn").addEventListener("click", () => {
+    if (!state.wallet) connectWallet();
+  });
 
   // Modal close
   document.getElementById("modal-close").addEventListener("click", closeModal);

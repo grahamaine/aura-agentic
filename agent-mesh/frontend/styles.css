@@ -299,6 +299,24 @@ body {
 
 .wallet-btn:hover { opacity: 0.88; }
 .wallet-btn.connected { background: var(--bg3); border: 1px solid var(--border); color: var(--t1); }
+.wallet-addr { font-size: 0.78rem; font-family: var(--font-mono); letter-spacing: 0.02em; }
+.wallet-disconnect {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(239,68,68,0.15);
+  color: var(--red);
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 1;
+  margin-left: 2px;
+  transition: background 0.15s;
+  cursor: pointer;
+}
+.wallet-disconnect:hover { background: rgba(239,68,68,0.35); }
 
 /* ── Content ───────────────────────────────────────────────────────────── */
 .content {
