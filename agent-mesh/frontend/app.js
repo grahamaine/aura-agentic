@@ -11,6 +11,12 @@ const MAINNET_RPC         = "https://api.infra.mainnet.somnia.network";
 const EXPLORER_TESTNET    = "https://shannon-explorer.somnia.network/";
 const EXPLORER_MAINNET    = "https://explorer.somnia.network/";
 
+// ── Deployed contract addresses (Somnia testnet, 2026-05-20) ────────────────
+const CONTRACT_REGISTRY = "0xe72b8E159291E152860A0313E125d3d3c96FeD4e";
+const CONTRACT_VAULT    = "0x77E8b2ab44f5e676F8fB8FBF05FE1b4cbc2f8c60";
+const CONTRACT_MARKET   = "0xF1d421e02d92D89f28AFdfAB3223E60644a36eCA";
+const EXPLORER_ADDR     = (addr) => `${EXPLORER_TESTNET}address/${addr}`;
+
 const CAP_LABELS  = ["Research","Code Gen","Analysis","Verification","Orchestration","Data Fetch"];
 const CAP_DESCS   = [
   "Web search, data gathering, fact-checking",
@@ -203,6 +209,21 @@ function renderDashboard(root) {
       </div>
     </div>
 
+    <!-- Deployed Contracts -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header">
+        <h2>⬡ Live Contracts — Somnia Testnet</h2>
+        <span class="pill" style="background:rgba(34,197,94,.12);color:var(--green)">● Deployed</span>
+      </div>
+      <div class="card-body" style="padding:10px 14px">
+        <div style="display:flex;flex-direction:column;gap:8px">
+          ${contractRow("AgentRegistry", CONTRACT_REGISTRY, "Agent registration, staking & reputation")}
+          ${contractRow("AgentVault",    CONTRACT_VAULT,    "Escrow — holds STT until task verified")}
+          ${contractRow("TaskMarket",    CONTRACT_MARKET,   "Task lifecycle, bidding & payment release")}
+        </div>
+      </div>
+    </div>
+
     <!-- Autonomy + Pipeline + Activity -->
     <div class="three-col">
       <!-- Autonomy meter -->
@@ -262,6 +283,16 @@ function statCard(label, val, icon, color, trendType, trendText) {
     <div class="stat-value">${val}</div>
     <div class="stat-label">${label}</div>
     <span class="stat-trend ${trendType}">${trendText}</span>
+  </div>`;
+}
+
+function contractRow(name, addr, desc) {
+  return `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <div style="width:110px;font-size:0.72rem;font-weight:700;color:var(--cyan);flex-shrink:0">${name}</div>
+    <a href="${EXPLORER_ADDR(addr)}" target="_blank" rel="noopener"
+       style="font-family:var(--font-mono);font-size:0.68rem;color:var(--indigo);text-decoration:none;flex-shrink:0"
+       title="View on Somnia Explorer">${addr.slice(0,10)}...${addr.slice(-8)} ↗</a>
+    <div style="font-size:0.66rem;color:var(--t2);flex:1">${desc}</div>
   </div>`;
 }
 
