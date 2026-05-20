@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+
+# Editor / OS
+.vscode/
+.idea/
+*.code-workspace
+.DS_Store
+Thumbs.db
+
+# Claude Code internals
+.claude/
+
+# Hardhat / Foundry
+artifacts/
+cache/
+typechain/
+typechain-types/
+
+# Vercel
+.vercel/

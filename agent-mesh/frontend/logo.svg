@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none">
+  <defs>
+    <!-- Primary gradient: cyan → indigo -->
+    <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#00d4ff"/>
+      <stop offset="55%"  stop-color="#6c63ff"/>
+      <stop offset="100%" stop-color="#9333ea"/>
+    </linearGradient>
+    <!-- Softer glow gradient for orbit ring -->
+    <linearGradient id="g2" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#00d4ff" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#9333ea" stop-opacity="0.7"/>
+    </linearGradient>
+    <!-- Arrow gradient -->
+    <linearGradient id="g3" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0%"   stop-color="#6c63ff"/>
+      <stop offset="100%" stop-color="#c4b5fd"/>
+    </linearGradient>
+    <!-- Glow filter -->
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="2.5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="softglow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- ── Stylised "A" ──────────────────────────────────────────────────── -->
+  <!-- Outer A shape — thick stroked path -->
+  <path
+    d="M36 88 L60 28 L84 88"
+    stroke="url(#g1)"
+    stroke-width="7"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    fill="none"
+    filter="url(#glow)"
+  />
+  <!-- Crossbar of A -->
+  <line
+    x1="46" y1="68" x2="74" y2="68"
+    stroke="url(#g1)"
+    stroke-width="5.5"
+    stroke-linecap="round"
+    filter="url(#glow)"
+  />
+
+  <!-- ── Orbital ring (tilted ellipse) ─────────────────────────────────── -->
+  <!-- Main ring — centered slightly right of A, overlapping -->
+  <ellipse
+    cx="72" cy="62"
+    rx="26" ry="16"
+    transform="rotate(-30 72 62)"
+    stroke="url(#g2)"
+    stroke-width="3"
+    fill="none"
+    filter="url(#glow)"
+    stroke-dasharray="0"
+  />
+
+  <!-- Node dots on the orbit ring -->
+  <!-- Node 1 — top-left of ring -->
+  <circle cx="52" cy="48" r="3.2" fill="url(#g1)" filter="url(#softglow)"/>
+  <!-- Node 2 — bottom-right of ring -->
+  <circle cx="90" cy="73" r="2.6" fill="#9333ea" filter="url(#softglow)"/>
+  <!-- Node 3 — right edge -->
+  <circle cx="95" cy="57" r="2" fill="#00d4ff" filter="url(#softglow)" opacity="0.8"/>
+
+  <!-- ── Upward-right arrow ─────────────────────────────────────────────── -->
+  <!-- Arrow shaft -->
+  <line
+    x1="78" y1="72"
+    x2="100" y2="42"
+    stroke="url(#g3)"
+    stroke-width="4"
+    stroke-linecap="round"
+    filter="url(#glow)"
+  />
+  <!-- Arrow head -->
+  <polyline
+    points="84,40 100,42 98,58"
+    stroke="url(#g3)"
+    stroke-width="4"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    fill="none"
+    filter="url(#glow)"
+  />
+</svg>
