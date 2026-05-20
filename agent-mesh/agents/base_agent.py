@@ -23,7 +23,7 @@ from web3 import AsyncWeb3, Web3
 from web3.middleware import ExtraDataToPOAMiddleware
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +98,9 @@ TASK_MARKET_ABI = json.loads("""[
    "stateMutability":"view","type":"function"},
   {"inputs":[],"name":"getOpenTasks",
    "outputs":[{"internalType":"uint256[]","name":"","type":"uint256[]"}],
+   "stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"taskCount",
+   "outputs":[{"internalType":"uint256","name":"","type":"uint256"}],
    "stateMutability":"view","type":"function"},
   {"anonymous":false,"inputs":[
      {"indexed":true,"internalType":"uint256","name":"taskId","type":"uint256"},
@@ -208,7 +211,7 @@ class BaseAgent(ABC):
         async def _attempt():
             nonce = await self.w3.eth.get_transaction_count(self.address)
             gas_price = await self.w3.eth.gas_price
-            tx = fn.build_transaction({
+            tx = await fn.build_transaction({
                 "from": self.address,
                 "nonce": nonce,
                 "gasPrice": gas_price,
@@ -278,16 +281,31 @@ class BaseAgent(ABC):
 
     # ── Main loop ──────────────────────────────────────────────────────────
 
+    async def _ensure_registered(self):
+        """Register on-chain if not already registered."""
+        assert self._registry is not None, "call setup_contracts() first"
+        try:
+            profile = await self._registry.functions.getAgent(self.address).call()
+            if profile[0] == "0x0000000000000000000000000000000000000000":
+                self.log.info("Not registered — registering on-chain...")
+                await self.register_on_chain()
+            else:
+                self.log.info(f"Already registered — reputation: {profile[6]}")
+        except Exception as e:
+            self.log.warning(f"Registration check failed: {e}")
+
     async def run(self):
         """
         Reactive event loop:
-          1. Subscribe to TaskPosted events on Somnia
-          2. Filter tasks matching this agent's capabilities
-          3. Autonomously bid and execute
+          1. Auto-register on-chain if needed
+          2. Subscribe to TaskPosted events on Somnia
+          3. Filter tasks matching this agent's capabilities
+          4. Autonomously bid and execute
         """
         assert self._market is not None, "call setup_contracts() first"
         self._running = True
         self.log.info(f"{self.config.name} starting — wallet {self.address}")
+        await self._ensure_registered()
         last_block = await self.w3.eth.block_number
 
         while self._running:
@@ -296,7 +314,7 @@ class BaseAgent(ABC):
                 if current_block > last_block:
                     # Fetch TaskPosted events since last processed block
                     events = await self._market.events.TaskPosted.get_logs(
-                        fromBlock=last_block + 1, toBlock=current_block
+                        from_block=last_block + 1, to_block=current_block
                     )
                     for evt in events:
                         task_id = evt["args"]["taskId"]

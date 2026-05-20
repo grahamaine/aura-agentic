@@ -16,7 +16,7 @@ from typing import Type
 
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)
 
 # ── Logging ────────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -41,7 +41,7 @@ except ImportError as e:
 
 # ── Config helpers ─────────────────────────────────────────────────────────────
 SOMNIA_RPC      = os.environ.get("SOMNIA_RPC",            "https://api.infra.testnet.somnia.network")
-REGISTRY_ADDR   = os.environ.get("REGISTRY_ADDRESS",      "")
+REGISTRY_ADDR   = os.environ.get("AGENT_REGISTRY_ADDRESS", os.environ.get("REGISTRY_ADDRESS", ""))
 MARKET_ADDR     = os.environ.get("TASK_MARKET_ADDRESS",   "")
 ANTHROPIC_KEY   = os.environ.get("ANTHROPIC_API_KEY",     "")
 
