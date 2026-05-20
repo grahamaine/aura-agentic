@@ -15,9 +15,10 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import Any
+from typing import Any, Optional
 
 import anthropic
+from anthropic.types import TextBlock
 from web3 import AsyncWeb3, Web3
 from web3.middleware import ExtraDataToPOAMiddleware
 from dotenv import load_dotenv
@@ -166,8 +167,8 @@ class BaseAgent(ABC):
         self.claude = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
         # Contract handles (set after addresses are known)
-        self._registry = None
-        self._market = None
+        self._registry: Optional[Any] = None
+        self._market: Optional[Any] = None
 
         self._running = False
         self.stats = {"tasks_bid": 0, "tasks_completed": 0, "stt_earned_wei": 0}
@@ -201,6 +202,7 @@ class BaseAgent(ABC):
         return receipt["transactionHash"].hex()
 
     async def register_on_chain(self):
+        assert self._registry is not None, "call setup_contracts() first"
         caps = [int(c) for c in self.config.capabilities]
         fn = self._registry.functions.register(
             self.config.name, f"agent://{self.address}", caps
@@ -210,6 +212,7 @@ class BaseAgent(ABC):
         return tx
 
     async def bid_on_task(self, task_id: int) -> str:
+        assert self._market is not None, "call setup_contracts() first"
         fn = self._market.functions.submitBid(task_id)
         tx = await self._send_tx(fn)
         self.stats["tasks_bid"] += 1
@@ -217,12 +220,14 @@ class BaseAgent(ABC):
         return tx
 
     async def submit_result(self, task_id: int, result_hash: str) -> str:
+        assert self._market is not None, "call setup_contracts() first"
         fn = self._market.functions.submitResult(task_id, result_hash)
         tx = await self._send_tx(fn)
         self.log.info(f"Submitted result for #{task_id}: {tx}")
         return tx
 
     async def get_task(self, task_id: int) -> dict:
+        assert self._market is not None, "call setup_contracts() first"
         raw = await self._market.functions.getTask(task_id).call()
         keys = ["id","poster","title","description","inputData","requiredCapability",
                 "reward","deadline","status","assignedAgent","bidders",
@@ -230,6 +235,7 @@ class BaseAgent(ABC):
         return dict(zip(keys, raw))
 
     async def get_open_tasks(self) -> list[int]:
+        assert self._market is not None, "call setup_contracts() first"
         return list(await self._market.functions.getOpenTasks().call())
 
     # ── Claude inference ───────────────────────────────────────────────────
@@ -242,7 +248,8 @@ class BaseAgent(ABC):
             system=system,
             messages=[{"role": "user", "content": user_msg}],
         )
-        return resp.content[0].text
+        block = next((b for b in resp.content if isinstance(b, TextBlock)), None)
+        return block.text if block else ""
 
     # ── Main loop ──────────────────────────────────────────────────────────
 
@@ -253,6 +260,7 @@ class BaseAgent(ABC):
           2. Filter tasks matching this agent's capabilities
           3. Autonomously bid and execute
         """
+        assert self._market is not None, "call setup_contracts() first"
         self._running = True
         self.log.info(f"{self.config.name} starting — wallet {self.address}")
         last_block = await self.w3.eth.block_number
