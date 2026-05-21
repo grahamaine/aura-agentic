@@ -1606,28 +1606,57 @@ function updateBadges() {
 }
 
 // ── Wallet ─────────────────────────────────────────────────────────────────────
-const WALLET_SVG = `<svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z"/><path fill-rule="evenodd" d="M18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z" clip-rule="evenodd"/></svg>`;
+const WC_PROJECT_ID = "5b3287538b8b8f55ba08cdd88b84e54c";
 
+// ── Wallet modal ──────────────────────────────────────────────────────────────
+function showWalletModal() {
+  const overlay = document.getElementById("wallet-modal-overlay");
+  if (overlay) overlay.classList.remove("hidden");
+}
+
+function closeWalletModal() {
+  const overlay = document.getElementById("wallet-modal-overlay");
+  if (overlay) overlay.classList.add("hidden");
+}
+
+// ── Connected / disconnected UI state ─────────────────────────────────────────
 function setWalletConnected(address) {
+  // Hide connect button
   const btn = document.getElementById("wallet-btn");
-  if (!btn) return;
-  btn.classList.add("connected");
-  const balLabel = state.balance && state.balance !== "0" ? `<span style="color:var(--cyan);font-family:var(--font-mono);font-size:0.68rem">${state.balance} STT</span>` : "";
-  btn.innerHTML = `${WALLET_SVG}
-    <span class="wallet-addr">${address.slice(0,6)}…${address.slice(-4)}</span>
-    ${balLabel}
-    <span class="wallet-disconnect" onclick="event.stopPropagation();disconnectWallet()" title="Disconnect">✕</span>`;
+  if (btn) btn.classList.add("hidden");
+
+  // Show wallet info pill
+  const info = document.getElementById("wallet-info");
+  if (info) {
+    info.classList.remove("hidden");
+    const addrEl = document.getElementById("wi-addr");
+    if (addrEl) addrEl.textContent = `${address.slice(0,6)}…${address.slice(-4)}`;
+    const balEl = document.getElementById("wi-bal");
+    if (balEl) balEl.textContent = state.balance && state.balance !== "0" ? `${state.balance} STT` : "";
+  }
+
+  // Show disconnect button
+  const disc = document.getElementById("disconnect-btn");
+  if (disc) disc.classList.remove("hidden");
 }
 
 function setWalletDisconnected() {
+  // Show connect button
   const btn = document.getElementById("wallet-btn");
-  if (!btn) return;
-  btn.classList.remove("connected");
-  btn.innerHTML = `${WALLET_SVG}<span id="wallet-label">Connect Wallet</span>`;
+  if (btn) btn.classList.remove("hidden");
+
+  // Hide wallet info pill
+  const info = document.getElementById("wallet-info");
+  if (info) info.classList.add("hidden");
+
+  // Hide disconnect button
+  const disc = document.getElementById("disconnect-btn");
+  if (disc) disc.classList.add("hidden");
 }
 
 function disconnectWallet() {
   state.wallet = null;
+  state.balance = "0";
   setWalletDisconnected();
   const dot = document.getElementById("net-dot");
   if (dot) dot.classList.remove("connected");
@@ -1637,8 +1666,36 @@ function disconnectWallet() {
   addEvent("info", "🔌", "Wallet disconnected", "");
 }
 
-async function connectWallet() {
-  if (!window.ethereum) { toast("warn","No Wallet","Install MetaMask to connect"); return; }
+// ── Shared post-connect handler ───────────────────────────────────────────────
+async function _onWalletConnected(provider) {
+  const ethersProvider = new ethers.BrowserProvider(provider);
+  const accounts = await ethersProvider.listAccounts();
+  state.wallet = accounts[0]?.address || accounts[0];
+
+  try {
+    const bal = await ethersProvider.getBalance(state.wallet);
+    state.balance = parseFloat(ethers.formatEther(bal)).toFixed(4);
+  } catch { state.balance = "0"; }
+
+  setWalletConnected(state.wallet);
+  closeWalletModal();
+
+  const dot = document.getElementById("net-dot");
+  if (dot) dot.classList.add("connected");
+  const label = document.getElementById("net-label");
+  if (label) label.textContent = "Somnia Testnet";
+
+  toast("success", "Wallet Connected", `${state.wallet.slice(0,10)}… · ${state.balance} STT`);
+  addEvent("success","🔗","Wallet connected", `${state.wallet.slice(0,10)}… · ${state.balance} STT`);
+  loadChainData();
+}
+
+// ── MetaMask ──────────────────────────────────────────────────────────────────
+async function connectMetaMask() {
+  if (!window.ethereum) {
+    toast("warn","No MetaMask","Install the MetaMask browser extension to continue");
+    return;
+  }
   try {
     await window.ethereum.request({ method: "eth_requestAccounts" });
     try {
@@ -1654,27 +1711,56 @@ async function connectWallet() {
         }]});
       }
     }
-    const accounts = await window.ethereum.request({method:"eth_accounts"});
-    state.wallet = accounts[0];
-
-    // Fetch STT balance
-    try {
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const bal = await provider.getBalance(state.wallet);
-      state.balance = parseFloat(ethers.formatEther(bal)).toFixed(4);
-    } catch {}
-
-    setWalletConnected(state.wallet);
-    const dot = document.getElementById("net-dot");
-    if (dot) dot.classList.add("connected");
-    document.getElementById("net-label").textContent = "Somnia Testnet";
-    toast("success", "Wallet Connected", `${state.wallet.slice(0,10)}… · ${state.balance} STT`);
-    addEvent("success","🔗","Wallet connected", `${state.wallet.slice(0,10)}… · ${state.balance} STT`);
-    // Reload chain data with wallet context (balance, owned tasks, etc.)
-    loadChainData();
+    await _onWalletConnected(window.ethereum);
   } catch(e) {
-    toast("error","Connection Failed", e.message?.slice(0,60));
+    if (e.code !== 4001) toast("error","MetaMask Error", e.message?.slice(0,60));
   }
+}
+
+// ── WalletConnect ─────────────────────────────────────────────────────────────
+async function connectWalletConnect() {
+  if (!WC_PROJECT_ID) {
+    toast("warn","WalletConnect","Add your WC_PROJECT_ID in app.js (free at cloud.walletconnect.com)");
+    return;
+  }
+  closeWalletModal();
+  toast("info","WalletConnect","Loading QR modal…");
+
+  try {
+    // Dynamic load — keeps page startup fast
+    if (!window.EthereumProvider) {
+      await _loadScript("https://unpkg.com/@walletconnect/ethereum-provider@2.11.2/dist/index.umd.js");
+    }
+    const provider = await window.EthereumProvider.init({
+      projectId: WC_PROJECT_ID,
+      chains: [50312],
+      showQrModal: true,
+      qrModalOptions: { themeMode: "dark" },
+      metadata: {
+        name: "AuraAgentic",
+        description: "Autonomous Agent Economy on Somnia Agentic L1",
+        url: window.location.origin,
+        icons: [`${window.location.origin}/logo.svg`],
+      },
+      rpcMap: { 50312: SOMNIA_RPC },
+    });
+    await provider.connect();
+    await _onWalletConnected(provider);
+  } catch(e) {
+    if (!e.message?.includes("User rejected")) {
+      toast("error","WalletConnect Failed", e.message?.slice(0,70));
+    }
+  }
+}
+
+function _loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = () => reject(new Error(`Failed to load ${src}`));
+    document.head.appendChild(s);
+  });
 }
 
 // ── Toasts ─────────────────────────────────────────────────────────────────────
@@ -2628,10 +2714,21 @@ document.addEventListener("DOMContentLoaded", () => {
     btn.addEventListener("click", () => navigate(btn.dataset.view));
   });
 
-  // Wallet — only trigger connect when not already connected (disconnect uses inline onclick)
-  document.getElementById("wallet-btn").addEventListener("click", () => {
-    if (!state.wallet) connectWallet();
+  // Wallet — connect button opens provider selection modal
+  document.getElementById("wallet-btn").addEventListener("click", showWalletModal);
+
+  // Wallet modal — close on overlay click or close button
+  document.getElementById("wallet-modal-close").addEventListener("click", closeWalletModal);
+  document.getElementById("wallet-modal-overlay").addEventListener("click", e => {
+    if (e.target === document.getElementById("wallet-modal-overlay")) closeWalletModal();
   });
+
+  // Wallet modal — provider options
+  document.getElementById("wopt-metamask").addEventListener("click", connectMetaMask);
+  document.getElementById("wopt-wc").addEventListener("click", connectWalletConnect);
+
+  // Disconnect button
+  document.getElementById("disconnect-btn").addEventListener("click", disconnectWallet);
 
   // Modal close
   document.getElementById("modal-close").addEventListener("click", closeModal);

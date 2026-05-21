@@ -125,11 +125,21 @@
         <span class="demo-dot"></span> Demo Live
       </button>
 
-      <!-- Wallet -->
+      <!-- Wallet connected info -->
+      <div class="wallet-info hidden" id="wallet-info">
+        <span class="wi-dot" id="wi-dot"></span>
+        <span class="wi-addr" id="wi-addr"></span>
+        <span class="wi-bal" id="wi-bal"></span>
+      </div>
+
+      <!-- Connect Wallet button (disconnected state) -->
       <button class="wallet-btn" id="wallet-btn">
-        <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z"/><path fill-rule="evenodd" d="M18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z" clip-rule="evenodd"/></svg>
-        <span id="wallet-label">Connect Wallet</span>
+        <svg viewBox="0 0 20 20" fill="currentColor" width="15" height="15"><path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z"/><path fill-rule="evenodd" d="M18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z" clip-rule="evenodd"/></svg>
+        <span>Connect Wallet</span>
       </button>
+
+      <!-- Disconnect button (connected state) -->
+      <button class="disconnect-btn hidden" id="disconnect-btn">Disconnect</button>
     </div>
   </header>
 
@@ -138,6 +148,68 @@
     <!-- Views are injected here by app.js -->
   </main>
 
+</div>
+
+<!-- ── Wallet selection modal ──────────────────────────────────────── -->
+<div id="wallet-modal-overlay" class="wallet-modal-overlay hidden">
+  <div class="wallet-modal-card">
+    <button class="wallet-modal-close" id="wallet-modal-close">
+      <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+    </button>
+    <div class="wallet-modal-header">
+      <div class="wallet-modal-logo">
+        <svg viewBox="0 0 20 20" fill="currentColor" width="22" height="22"><path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z"/><path fill-rule="evenodd" d="M18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z" clip-rule="evenodd"/></svg>
+      </div>
+      <h2 class="wallet-modal-title">Connect Wallet</h2>
+      <p class="wallet-modal-subtitle">Choose a provider to connect to Somnia Testnet</p>
+    </div>
+
+    <div class="wallet-options">
+      <!-- MetaMask -->
+      <button class="wallet-option" id="wopt-metamask">
+        <div class="wopt-icon-wrap wopt-mm">
+          <!-- MetaMask fox SVG simplified -->
+          <svg viewBox="0 0 35 33" width="28" height="28" xmlns="http://www.w3.org/2000/svg">
+            <polygon points="32.958,0.5 19.268,10.219 21.716,4.419" fill="#e17726" stroke="#e17726" stroke-width="0.25"/>
+            <polygon points="2.042,0.5 15.617,10.31 13.284,4.419" fill="#e27625" stroke="#e27625" stroke-width="0.25"/>
+            <polygon points="28.115,23.533 24.432,29.028 32.154,31.098 34.296,23.651" fill="#e27625" stroke="#e27625" stroke-width="0.25"/>
+            <polygon points="0.704,23.651 2.846,31.098 10.568,29.028 6.885,23.533" fill="#e27625" stroke="#e27625" stroke-width="0.25"/>
+            <polygon points="10.181,14.367 8.103,17.428 15.76,17.776 15.497,9.535" fill="#e27625" stroke="#e27625" stroke-width="0.25"/>
+            <polygon points="24.819,14.367 19.381,9.444 19.24,17.776 26.897,17.428" fill="#e27625" stroke="#e27625" stroke-width="0.25"/>
+            <polygon points="10.568,29.028 15.286,26.853 11.225,23.706" fill="#e27625" stroke="#e27625" stroke-width="0.25"/>
+            <polygon points="19.714,26.853 24.432,29.028 23.775,23.706" fill="#e27625" stroke="#e27625" stroke-width="0.25"/>
+          </svg>
+        </div>
+        <div class="wopt-info">
+          <span class="wopt-name">MetaMask</span>
+          <span class="wopt-desc">Browser extension wallet</span>
+        </div>
+        <svg class="wopt-arrow" viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
+      </button>
+
+      <!-- WalletConnect -->
+      <button class="wallet-option" id="wopt-wc">
+        <div class="wopt-icon-wrap wopt-wc">
+          <!-- WalletConnect W logo -->
+          <svg viewBox="0 0 300 185" width="28" height="18" xmlns="http://www.w3.org/2000/svg">
+            <path d="M61.44 36.24c48.9-47.88 128.22-47.88 177.12 0l5.88 5.76a6.02 6.02 0 010 8.64L227.28 67.2a3.16 3.16 0 01-4.44 0l-8.1-7.92c-34.14-33.42-89.46-33.42-123.6 0l-8.67 8.49a3.16 3.16 0 01-4.44 0L60.87 50.64a6.02 6.02 0 010-8.64l.57-5.76zm218.62 40.73l17.66 17.28a6.02 6.02 0 010 8.64l-79.62 77.94a6.32 6.32 0 01-8.88 0l-56.52-55.32a1.58 1.58 0 00-2.22 0L94.04 180.83a6.32 6.32 0 01-8.88 0L5.48 102.89a6.02 6.02 0 010-8.64L23.14 76.97a6.32 6.32 0 018.88 0l56.52 55.32c.6.6 1.62.6 2.22 0l56.52-55.32a6.32 6.32 0 018.88 0l56.52 55.32c.6.6 1.62.6 2.22 0l56.52-55.32a6.32 6.32 0 018.88 0z" fill="#3B99FC"/>
+          </svg>
+        </div>
+        <div class="wopt-info">
+          <span class="wopt-name">WalletConnect</span>
+          <span class="wopt-desc">Mobile wallet via QR code</span>
+        </div>
+        <svg class="wopt-arrow" viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
+      </button>
+    </div>
+
+    <div class="wallet-modal-footer">
+      <span class="wm-chain-badge">
+        <span class="wm-chain-dot"></span>
+        Somnia Testnet · Chain 50312
+      </span>
+    </div>
+  </div>
 </div>
 
 <!-- ── Toast container ─────────────────────────────────────────────── -->
