@@ -168,14 +168,14 @@ function navigate(view) {
   document.querySelectorAll(".nav-item").forEach(el => {
     el.classList.toggle("active", el.dataset.view === view);
   });
-  const titles = { dashboard:"Dashboard", agents:"Agents", tasks:"Task Marketplace", pipeline:"Agent Pipeline", analytics:"Analytics", register:"Register Agent", portfolio:"My Portfolio" };
+  const titles = { dashboard:"Dashboard", agents:"Agents", tasks:"Task Marketplace", pipeline:"Agent Pipeline", analytics:"Analytics", register:"Register Agent", portfolio:"My Portfolio", sentinel:"Sentinel — Live Intelligence" };
   document.getElementById("topbar-title").textContent = titles[view] || view;
   render();
 }
 
 function render() {
   const content = document.getElementById("content");
-  const views = { dashboard: renderDashboard, agents: renderAgents, tasks: renderTasks, pipeline: renderPipeline, analytics: renderAnalytics, register: renderRegister, portfolio: renderPortfolio };
+  const views = { dashboard: renderDashboard, agents: renderAgents, tasks: renderTasks, pipeline: renderPipeline, analytics: renderAnalytics, register: renderRegister, portfolio: renderPortfolio, sentinel: renderSentinel };
   content.innerHTML = "";
   if (views[state.view]) views[state.view](content);
 }
@@ -1320,11 +1320,14 @@ function tickBlock() {
 
 // ── Badges ─────────────────────────────────────────────────────────────────────
 function updateBadges() {
-  const openTasks = state.tasks.filter(t=>t.status===0).length;
+  const openTasks     = state.tasks.filter(t=>t.status===0).length;
+  const sentinelCount = state.tasks.filter(isSentinelTask).length;
   const el1 = document.getElementById("badge-agents");
   const el2 = document.getElementById("badge-tasks");
+  const el3 = document.getElementById("badge-sentinel");
   if (el1) el1.textContent = state.agents.length;
   if (el2) el2.textContent = openTasks;
+  if (el3) { el3.textContent = sentinelCount; el3.style.display = sentinelCount > 0 ? "" : "none"; }
 }
 
 // ── Wallet ─────────────────────────────────────────────────────────────────────
@@ -2116,6 +2119,220 @@ function startEventPolling() {
   _pollFromBlock = null;
   _pollInterval  = setInterval(pollChainEvents, 4000);
   pollChainEvents();
+}
+
+// ── Sentinel state + helpers ──────────────────────────────────────────────────
+
+const SENTINEL_RULES = {
+  new_agent:       { label:"New Agent Registered",       icon:"🤖", color:"var(--indigo)" },
+  high_value_task: { label:"High-Value Task Detected",   icon:"💎", color:"var(--cyan)"   },
+  velocity_spike:  { label:"Task Velocity Spike",        icon:"⚡", color:"var(--yellow)" },
+  elite_result:    { label:"Elite Quality Score",        icon:"🏆", color:"var(--green)"  },
+  ecosystem_pulse: { label:"Ecosystem Health Pulse",     icon:"🌐", color:"var(--purple)" },
+};
+
+// Sentinel tasks = tasks whose inputData has "source":"sentinel"
+function isSentinelTask(t) {
+  if (!t || !t.inputData) return false;
+  try { return JSON.parse(t.inputData).source === "sentinel"; } catch { return false; }
+}
+
+function parseSentinelMeta(t) {
+  try { return JSON.parse(t.inputData || "{}"); } catch { return {}; }
+}
+
+function updateSentinelBadge() {
+  const count = state.tasks.filter(isSentinelTask).length;
+  const el = document.getElementById("badge-sentinel");
+  if (el) el.textContent = count;
+}
+
+// ── SENTINEL view ─────────────────────────────────────────────────────────────
+function renderSentinel(root) {
+  const sentinelTasks = state.tasks.filter(isSentinelTask);
+  const completed     = sentinelTasks.filter(t => t.status === 4);
+  const pending       = sentinelTasks.filter(t => t.status < 4);
+  const totalReward   = sentinelTasks.reduce((s, t) => s + t.reward, 0);
+  const avgQuality    = completed.length
+    ? Math.round(completed.reduce((s,t) => s + t.quality, 0) / completed.length) : 0;
+
+  // Group detections by rule
+  const byRule = {};
+  sentinelTasks.forEach(t => {
+    const meta = parseSentinelMeta(t);
+    const rule = meta.rule || "unknown";
+    byRule[rule] = (byRule[rule] || 0) + 1;
+  });
+
+  root.innerHTML = `
+  <div class="view">
+
+    <!-- Header -->
+    <div class="page-header" style="margin-bottom:20px">
+      <h1>Sentinel</h1>
+      <p>Autonomous block-watching agent — processes every Somnia block in real-time and self-directs the swarm</p>
+    </div>
+
+    <!-- Sentinel status bar -->
+    <div class="sentinel-status-bar">
+      <div class="ssb-dot-wrap">
+        <span class="ssb-dot"></span>
+        <span class="ssb-dot-ring"></span>
+      </div>
+      <div class="ssb-text">
+        <span class="ssb-title">AURA Sentinel Active</span>
+        <span class="ssb-sub">Polling every 500 ms · Somnia &lt;1s finality · Block <strong id="sentinel-block">${state.blockNumber.toLocaleString()}</strong></span>
+      </div>
+      <div class="ssb-stats">
+        <div class="ssb-stat"><span class="ssb-stat-val" style="color:var(--cyan)">${sentinelTasks.length}</span><span class="ssb-stat-lbl">Tasks Spawned</span></div>
+        <div class="ssb-stat"><span class="ssb-stat-val" style="color:var(--green)">${completed.length}</span><span class="ssb-stat-lbl">Completed</span></div>
+        <div class="ssb-stat"><span class="ssb-stat-val" style="color:var(--yellow)">${pending.length}</span><span class="ssb-stat-lbl">In Pipeline</span></div>
+        <div class="ssb-stat"><span class="ssb-stat-val" style="color:var(--purple)">${avgQuality || "—"}</span><span class="ssb-stat-lbl">Avg Quality</span></div>
+      </div>
+    </div>
+
+    <!-- Autonomy loop diagram -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header">
+        <h2>🔄 Autonomous Loop — No Human in the Chain</h2>
+        <span class="pill" style="background:rgba(34,197,94,.12);color:var(--green)">● Self-Directing</span>
+      </div>
+      <div class="card-body" style="padding:16px 20px">
+        <div class="sentinel-loop">
+          ${sentinelLoopStep("👁️", "Sentinel watches", "every Somnia block", "var(--cyan)", true)}
+          <div class="sentinel-loop-arrow">→</div>
+          ${sentinelLoopStep("🎯", "Detects event", "5 trigger rules", "var(--indigo)", sentinelTasks.length > 0)}
+          <div class="sentinel-loop-arrow">→</div>
+          ${sentinelLoopStep("📋", "Posts task", "STT reward on-chain", "var(--yellow)", sentinelTasks.length > 0)}
+          <div class="sentinel-loop-arrow">→</div>
+          ${sentinelLoopStep("🤖", "Agent executes", "bids → runs → submits", "var(--purple)", completed.length > 0)}
+          <div class="sentinel-loop-arrow">→</div>
+          ${sentinelLoopStep("✅", "Verifier pays", "quality-gated release", "var(--green)", completed.length > 0)}
+          <div class="sentinel-loop-arrow">↩</div>
+        </div>
+        <div style="text-align:center;margin-top:10px;font-size:0.68rem;color:var(--t3);letter-spacing:0.06em;text-transform:uppercase">
+          Closed loop · Zero human triggers · Entirely on-chain · Unique to Somnia's sub-second finality
+        </div>
+      </div>
+    </div>
+
+    <!-- Detection rules + stats -->
+    <div class="two-col" style="margin-bottom:16px;align-items:start">
+      <div class="card">
+        <div class="card-header"><h2>🔍 Detection Rules</h2></div>
+        <div class="card-body" style="padding:10px 14px;display:flex;flex-direction:column;gap:8px">
+          ${Object.entries(SENTINEL_RULES).map(([key, r]) => `
+            <div class="sentinel-rule-row">
+              <span class="sentinel-rule-icon">${r.icon}</span>
+              <div class="sentinel-rule-body">
+                <div class="sentinel-rule-name">${r.label}</div>
+                <div class="sentinel-rule-desc">${sentinelRuleDesc(key)}</div>
+              </div>
+              <span class="sentinel-rule-count" style="color:${r.color}">${byRule[key] || 0}</span>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h2>📡 Why Somnia Makes This Possible</h2></div>
+        <div class="card-body" style="padding:12px 16px;display:flex;flex-direction:column;gap:10px">
+          ${sentinelAdvantage("⚡", "<1s Finality", "Sentinel processes every block as it lands. At Ethereum's 12s blocks, real-time block intelligence is impractical.", "var(--cyan)")}
+          ${sentinelAdvantage("🚀", "1M+ TPS Throughput", "The swarm can handle the task volume the sentinel creates without congestion or fee spikes.", "var(--indigo)")}
+          ${sentinelAdvantage("🔗", "On-Chain Everything", "Every detection, task post, bid, result and payment lives on Somnia — fully auditable, no backend.", "var(--green)")}
+          ${sentinelAdvantage("🤝", "Agent-Native L1", "Somnia's Agentic L1 is designed for agent-to-agent interaction — the sentinel is a first-class participant.", "var(--purple)")}
+        </div>
+      </div>
+    </div>
+
+    <!-- Live sentinel task feed -->
+    <div class="card">
+      <div class="card-header">
+        <h2>⬡ Sentinel-Spawned Tasks — Live Chain Feed</h2>
+        <span style="font-size:0.68rem;color:var(--t3)">${sentinelTasks.length} tasks · ${totalReward.toFixed(4)} STT deployed</span>
+      </div>
+      <div class="card-body" style="padding:0">
+        ${sentinelTasks.length === 0 ? `
+          <div class="empty-state" style="padding:40px 20px">
+            <div class="empty-state-icon">🛰️</div>
+            <div style="font-size:0.88rem;color:var(--t2);margin-bottom:8px">Sentinel is watching the chain</div>
+            <div style="font-size:0.72rem;color:var(--t3);max-width:340px;margin:0 auto">
+              Run <code style="color:var(--cyan);background:var(--bg3);padding:2px 6px;border-radius:4px">python agents/sentinel.py</code> to start autonomous detection.
+              Tasks will appear here as the sentinel fires.
+            </div>
+          </div>
+        ` : `
+          <div class="sentinel-task-list">
+            ${sentinelTasks.map(t => sentinelTaskRow(t)).join("")}
+          </div>
+        `}
+      </div>
+    </div>
+
+  </div>`;
+
+  // Update block number live
+  const blockEl = document.getElementById("sentinel-block");
+  if (blockEl) {
+    setInterval(() => {
+      if (document.contains(blockEl)) blockEl.textContent = state.blockNumber.toLocaleString();
+    }, 1000);
+  }
+
+  bindTaskClicks(root);
+}
+
+function sentinelLoopStep(icon, title, sub, color, active) {
+  return `<div class="sentinel-loop-step ${active ? "active" : ""}">
+    <div class="sls-icon" style="background:${active ? color+"22" : "var(--bg3)"};border-color:${active ? color : "var(--border)"}">${icon}</div>
+    <div class="sls-title" style="color:${active ? color : "var(--t3)"}">${title}</div>
+    <div class="sls-sub">${sub}</div>
+  </div>`;
+}
+
+function sentinelRuleDesc(key) {
+  const descs = {
+    new_agent:       "Fires when a new wallet registers on AgentRegistry",
+    high_value_task: "Fires when a task reward ≥ 0.005 STT is posted",
+    velocity_spike:  "Fires when task creation rate is 1.8× baseline over 3 blocks",
+    elite_result:    "Fires when a TaskCompleted event has quality ≥ 90/100",
+    ecosystem_pulse: "Fires every ~500 blocks for periodic health analysis",
+  };
+  return descs[key] || "";
+}
+
+function sentinelAdvantage(icon, title, desc, color) {
+  return `<div style="display:flex;gap:10px;align-items:flex-start">
+    <span style="font-size:1.2rem;flex-shrink:0;margin-top:2px">${icon}</span>
+    <div>
+      <div style="font-size:0.78rem;font-weight:600;color:${color};letter-spacing:0.04em;margin-bottom:3px">${title}</div>
+      <div style="font-size:0.7rem;color:var(--t2);line-height:1.5">${desc}</div>
+    </div>
+  </div>`;
+}
+
+function sentinelTaskRow(t) {
+  const meta  = parseSentinelMeta(t);
+  const rule  = SENTINEL_RULES[meta.rule] || { label: "Detection", icon: "🎯", color: "var(--indigo)" };
+  const stCls = STATUS_CLS[t.status]  || "s-open";
+  const dotCls= DOT_CLS[t.status]    || "dot-open";
+  return `<div class="sentinel-task-row" data-taskid="${t.id}">
+    <span class="sentinel-rule-icon-sm" style="color:${rule.color}">${rule.icon}</span>
+    <div class="sentinel-tr-body">
+      <div class="sentinel-tr-title">${esc(t.title.replace("[SENTINEL] ",""))}</div>
+      <div class="sentinel-tr-meta">
+        <span style="color:${rule.color}">${rule.label}</span>
+        <span>·</span>
+        <span>Task #${t.id}</span>
+        <span>·</span>
+        <span>${timeAgo(t.created)}</span>
+        ${meta.block ? `<span>· Block #${meta.block}</span>` : ""}
+      </div>
+    </div>
+    <span class="task-badge ${stCls}">${STATUS_LABELS[t.status]}</span>
+    <span class="task-reward">${t.reward.toFixed(4)} STT</span>
+    <span class="task-status-dot ${dotCls}"></span>
+  </div>`;
 }
 
 // ── Result preview helper ─────────────────────────────────────────────────────
