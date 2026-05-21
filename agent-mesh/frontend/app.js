@@ -34,6 +34,39 @@ const DOT_CLS       = ["dot-open","dot-assigned","dot-inprogress","dot-pending",
 const PRIORITY_LBL  = ["Low","Medium","High","Critical"];
 
 const AGENT_EMOJIS = ["🔬","💻","📊","🛡️","🎯","📡"];
+
+// ── Contract ABIs (full, matches deployed Solidity) ───────────────────────────
+const REGISTRY_ABI_FULL = [
+  "function register(string name, string endpoint, uint8[] caps) payable",
+  "function getAgent(address wallet) view returns (tuple(address wallet, string name, string endpoint, uint8[] capabilities, uint256 stake, uint256 completedTasks, uint256 reputation, uint8 status, uint256 registeredAt))",
+  "function getAgentsByCapability(uint8 cap) view returns (address[])",
+  "function isActive(address agent) view returns (bool)",
+  "function totalAgents() view returns (uint256)",
+  "event AgentRegistered(address indexed agent, string name, uint8[] capabilities)",
+  "event ReputationUpdated(address indexed agent, uint256 newScore)",
+];
+
+const MARKET_ABI_FULL = [
+  "function postTask(string title, string description, string inputData, uint8 requiredCapability, uint256 deadline, uint8 priority) payable returns (uint256 taskId)",
+  "function postSubTask(uint256 parentId, string title, string description, string inputData, uint8 requiredCapability, uint256 deadline) payable returns (uint256 subTaskId)",
+  "function submitBid(uint256 taskId)",
+  "function assignTask(uint256 taskId, address agent)",
+  "function submitResult(uint256 taskId, string resultHash)",
+  "function verifyAndPay(uint256 taskId, uint256 qualityScore)",
+  "function setVerifier(address v)",
+  "function cancelTask(uint256 taskId)",
+  "function getTask(uint256 taskId) view returns (tuple(uint256 id, address poster, string title, string description, string inputData, uint8 requiredCapability, uint256 reward, uint256 deadline, uint8 status, address assignedAgent, address[] bidders, string resultHash, uint256 qualityScore, uint8 priority, uint256 createdAt))",
+  "function getOpenTasks() view returns (uint256[])",
+  "function getSubTasks(uint256 parentId) view returns (uint256[])",
+  "function getBidders(uint256 taskId) view returns (address[])",
+  "function taskCount() view returns (uint256)",
+  "event TaskPosted(uint256 indexed taskId, address indexed poster, uint256 reward)",
+  "event BidSubmitted(uint256 indexed taskId, address indexed agent)",
+  "event TaskAssigned(uint256 indexed taskId, address indexed agent)",
+  "event TaskCompleted(uint256 indexed taskId, address indexed agent, uint256 qualityScore)",
+  "event TaskDisputed(uint256 indexed taskId, address indexed disputer)",
+  "event SubTaskCreated(uint256 indexed parentId, uint256 indexed subTaskId)",
+];
 const TASK_TOPICS  = [
   "Research latest DeFi TVL trends on Somnia",
   "Build a Python price feed aggregator",
@@ -1096,10 +1129,16 @@ function openTaskModal(task) {
       <label>Posted</label>
       <div class="val">${new Date(task.created*1000).toLocaleString()}</div>
     </div>
-    <div style="margin-top:14px">
-      <a href="${EXPLORER_TESTNET}" target="_blank" style="color:var(--indigo);font-size:0.78rem;text-decoration:none">
+    ${task.resultHash ? `
+    <div class="modal-section">
+      <label>AI Result ${task.status >= 4 ? "(Verified)" : "(Pending verification)"}</label>
+      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 12px;font-size:0.72rem;color:var(--t1);max-height:220px;overflow-y:auto;white-space:pre-wrap;line-height:1.55;font-family:var(--font-mono)">${esc(parseResult(task.resultHash))}</div>
+    </div>` : ""}
+    <div style="margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <a href="${EXPLORER_TESTNET}address/${CONTRACT_MARKET}" target="_blank" style="color:var(--indigo);font-size:0.78rem;text-decoration:none">
         View on Somnia Explorer →
       </a>
+      ${task.status === 0 && state.wallet ? `<button class="btn btn-primary" style="font-size:0.72rem;padding:5px 12px" onclick="closeModal();navigate('tasks')">Post a Bid →</button>` : ""}
     </div>`;
   showModal();
 }
@@ -1154,42 +1193,54 @@ function closeModal() {
   document.getElementById("modal-overlay").classList.add("hidden");
 }
 
-// ── Post task (demo) ───────────────────────────────────────────────────────────
-function postTask() {
-  const title  = document.getElementById("f-title")?.value?.trim();
-  const desc   = document.getElementById("f-desc")?.value?.trim();
-  const cap    = parseInt(document.getElementById("f-cap")?.value ?? "0");
-  const reward = parseFloat(document.getElementById("f-reward")?.value ?? "0.01");
+// ── Post task ─────────────────────────────────────────────────────────────────
+async function postTask() {
+  const title      = document.getElementById("f-title")?.value?.trim();
+  const desc       = document.getElementById("f-desc")?.value?.trim() || title;
+  const cap        = parseInt(document.getElementById("f-cap")?.value ?? "0");
+  const reward     = parseFloat(document.getElementById("f-reward")?.value ?? "0.01");
+  const deadlineMin = parseInt(document.getElementById("f-deadline")?.value ?? "30");
 
   if (!title) { setPostStatus("Enter a task title.", "var(--red)"); return; }
 
   const btn = document.getElementById("post-btn");
   if (btn) { btn.disabled = true; btn.textContent = "⏳ Posting..."; }
 
-  setPostStatus("Simulating on-chain transaction...", "var(--indigo)");
+  // ── Real on-chain transaction ─────────────────────────────────────────────
+  if (state.wallet && typeof ethers !== "undefined") {
+    try {
+      setPostStatus("Waiting for MetaMask signature...", "var(--indigo)");
+      const signer  = await getWriteSigner();
+      const market  = new ethers.Contract(CONTRACT_MARKET, MARKET_ABI_FULL, signer);
+      const deadline = Math.floor(Date.now() / 1000) + deadlineMin * 60;
+      const value    = ethers.parseEther(reward.toFixed(6));
 
-  setTimeout(() => {
-    const newTask = {
-      id: state.tasks.length + 1,
-      title, cap,
-      status: 0,
-      reward,
-      poster: state.wallet || "0xDemo",
-      assigned: null,
-      quality: 0,
-      created: Math.floor(Date.now()/1000),
-      bidders: 0,
-    };
-    state.tasks.unshift(newTask);
-    recomputeMetrics();
-    setPostStatus(`✅ Task #${newTask.id} posted! STT escrowed.`, "var(--green)");
+      const tx = await market.postTask(title, desc, "{}", cap, deadline, 1, { value });
+      setPostStatus("Confirming on Somnia (<1s)...", "var(--cyan)");
+      if (btn) btn.textContent = "⏳ Confirming...";
+
+      const receipt = await tx.wait();
+      const txHash  = receipt.hash.slice(0, 14) + "...";
+      setPostStatus(`✅ Posted on-chain · TX: ${txHash}`, "var(--green)");
+      toast("success", "Task Posted!", `${reward} STT escrowed on Somnia`);
+      addEvent("success", "📋", `Task posted on-chain`, `${reward} STT escrowed · ${txHash}`);
+      await loadChainData();
+    } catch (e) {
+      setPostStatus(`Error: ${(e.message || e).slice(0, 80)}`, "var(--red)");
+      toast("error", "Transaction Failed", (e.message || "").slice(0, 60));
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = "🚀 Post Task & Escrow STT"; }
+    }
+    return;
+  }
+
+  // ── Demo fallback (no wallet) ─────────────────────────────────────────────
+  if (!state.wallet) {
+    setPostStatus("Connect your wallet to post a real on-chain task.", "var(--yellow)");
     if (btn) { btn.disabled = false; btn.textContent = "🚀 Post Task & Escrow STT"; }
-    toast("success", "Task Posted!", `"${title}" — ${reward} STT escrowed on Somnia`);
-    addEvent("info","📋",`Task #${newTask.id} posted`, `"${title}" — ${reward} STT`);
-
-    // Auto-assign after 3s
-    setTimeout(() => simulateBidAndAssign(newTask.id), 3000);
-  }, 1200);
+    toast("warn", "Wallet Required", "Connect MetaMask to post tasks on Somnia");
+    return;
+  }
 }
 
 function setPostStatus(msg, color) {
@@ -1324,6 +1375,9 @@ async function connectWallet() {
     document.getElementById("net-label").textContent = "Somnia Testnet";
     toast("success","Wallet Connected", state.wallet.slice(0,12)+"...");
     addEvent("success","🔗","Wallet connected", state.wallet.slice(0,10)+"...");
+    // Load real chain data and start live event polling
+    loadChainData();
+    startEventPolling();
   } catch(e) {
     toast("error","Connection Failed", e.message?.slice(0,60));
   }
@@ -1621,7 +1675,7 @@ async function deployAgent() {
   if (!regState.name) { toast("warn","Name Required","Go back and enter a name"); return; }
   if (regState.caps.length === 0) { toast("warn","No Capability","Go back and select a capability"); return; }
 
-  const btn = document.getElementById("deploy-btn");
+  const btn     = document.getElementById("deploy-btn");
   const logWrap = document.getElementById("deploy-log-wrap");
   if (btn) { btn.disabled = true; btn.textContent = "⏳ Deploying..."; }
 
@@ -1631,41 +1685,50 @@ async function deployAgent() {
     if (logWrap) logWrap.innerHTML = `<div class="deploy-log">${logLines.join("<br>")}</div>`;
   };
 
-  const steps = [
-    [500,  "log-wait", "> Signing transaction with wallet..."],
-    [900,  "log-info", "> Broadcasting to Somnia mempool..."],
-    [600,  "log-ok",   "> Block confirmed in 0.8s ✓"],
-    [500,  "log-ok",   "> AgentRegistry.registerAgent() executed ✓"],
-    [400,  "log-ok",   `> AgentVault.stake(${(regState.stake||0.1).toFixed(3)} STT) locked ✓`],
-    [300,  "log-ok",   "> Reputation initialized at " + Math.min(1000, Math.round(500+(regState.stake||0.1)*1000))],
-    [200,  "log-ok",   "> Agent is now LIVE on Somnia L1 ✓"],
-  ];
+  // ── Real on-chain registration ─────────────────────────────────────────────
+  if (state.wallet && typeof ethers !== "undefined") {
+    try {
+      addLog("log-wait", "> Preparing AgentRegistry.register() call...");
+      const signer   = await getWriteSigner();
+      const registry = new ethers.Contract(CONTRACT_REGISTRY, REGISTRY_ABI_FULL, signer);
+      const stakeWei = ethers.parseEther((regState.stake || 0.1).toFixed(6));
+      const endpoint = `agent://${state.wallet}`;
 
-  for (const [delay, cls, msg] of steps) {
-    await sleep(delay);
-    addLog(cls, msg);
+      addLog("log-wait", "> Waiting for MetaMask signature...");
+      const tx = await registry.register(regState.name, endpoint, regState.caps, { value: stakeWei });
+
+      addLog("log-info", "> Transaction submitted — Somnia confirming (<1s)...");
+      const receipt = await tx.wait();
+
+      addLog("log-ok", `> Block confirmed · TX: ${receipt.hash.slice(0,14)}...`);
+      addLog("log-ok", "> AgentRegistry.register() executed ✓");
+      addLog("log-ok", `> ${(regState.stake||0.1).toFixed(3)} STT staked as collateral ✓`);
+      addLog("log-ok", "> Reputation initialized at 500");
+      addLog("log-ok", "> Agent is now LIVE on Somnia L1 ✓");
+
+      addEvent("success","🤖",`${regState.name} deployed on-chain!`, `${(regState.stake||0.1).toFixed(3)} STT staked`);
+      toast("success","Agent Deployed!", `${regState.name} is live on Somnia`);
+
+      await loadChainData();
+      regState.step = 1; regState.name = ""; regState.desc = "";
+      regState.caps = []; regState.emoji = "🔬"; regState.stake = 0.1;
+      await sleep(1800);
+      navigate("agents");
+    } catch (e) {
+      addLog("log-error", `> Error: ${(e.message || e).slice(0, 100)}`);
+      toast("error","Deployment Failed", (e.message || "").slice(0, 60));
+      if (btn) { btn.disabled = false; btn.textContent = "🚀 Deploy on Somnia"; }
+    }
+    return;
   }
 
-  const caps = regState.caps.slice();
-  const newAgent = {
-    id: "0x" + Math.random().toString(16).slice(2,12),
-    name: regState.name,
-    caps,
-    rep: Math.min(1000, Math.round(500 + (regState.stake||0.1)*1000)),
-    tasks: 0,
-    earnings: 0,
-    status: 1,
-  };
-  state.agents.push(newAgent);
-  updateBadges();
-  addEvent("success","🤖",`${regState.name} deployed!`, `${(regState.stake||0.1).toFixed(3)} STT staked · Somnia L1`);
-  toast("success","Agent Deployed!", `${regState.name} is now live on Somnia`);
-
-  // Reset form state
-  regState.step = 1; regState.name = ""; regState.desc = "";
-  regState.caps = []; regState.emoji = "🔬"; regState.stake = 0.1;
-  await sleep(1800);
-  navigate("agents");
+  // ── Demo fallback (no wallet) ─────────────────────────────────────────────
+  if (!state.wallet) {
+    addLog("log-wait", "> Connect your MetaMask wallet to deploy on-chain.");
+    toast("warn", "Wallet Required", "Connect MetaMask to register on Somnia");
+    if (btn) { btn.disabled = false; btn.textContent = "🚀 Deploy on Somnia"; }
+    return;
+  }
 }
 
 // ── MY PORTFOLIO view ──────────────────────────────────────────────────────────
@@ -1882,6 +1945,167 @@ async function initNetworkStatus() {
   }
 }
 
+// ── Chain integration ─────────────────────────────────────────────────────────
+
+function getReadProvider() {
+  return new ethers.JsonRpcProvider(SOMNIA_RPC);
+}
+
+async function getWriteSigner() {
+  const provider = new ethers.BrowserProvider(window.ethereum);
+  return provider.getSigner();
+}
+
+function taskFromChain(t) {
+  const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
+  return {
+    id:         Number(t.id),
+    title:      t.title,
+    cap:        Number(t.requiredCapability),
+    status:     Number(t.status),
+    reward:     Number(ethers.formatEther(t.reward)),
+    poster:     t.poster,
+    assigned:   t.assignedAgent === ZERO_ADDR ? null : t.assignedAgent,
+    quality:    Number(t.qualityScore),
+    created:    Number(t.createdAt),
+    bidders:    t.bidders.length,
+    resultHash: t.resultHash || "",
+  };
+}
+
+function agentFromChain(p) {
+  return {
+    id:       p.wallet,
+    name:     p.name,
+    caps:     p.capabilities.map(c => Number(c)),
+    rep:      Number(p.reputation),
+    tasks:    Number(p.completedTasks),
+    earnings: Number(ethers.formatEther(p.stake)),
+    status:   Number(p.status),
+  };
+}
+
+async function loadChainData() {
+  if (typeof ethers === "undefined") return;
+  const provider = getReadProvider();
+  const registry = new ethers.Contract(CONTRACT_REGISTRY, REGISTRY_ABI_FULL, provider);
+  const market   = new ethers.Contract(CONTRACT_MARKET,   MARKET_ABI_FULL,   provider);
+
+  // ── Agents ────────────────────────────────────────────────────────────────
+  try {
+    const seen = new Set();
+    const addrs = [];
+    for (let cap = 0; cap < 6; cap++) {
+      try {
+        const list = await registry.getAgentsByCapability(cap);
+        list.forEach(a => { if (!seen.has(a)) { seen.add(a); addrs.push(a); } });
+      } catch {}
+    }
+    const profiles = await Promise.all(addrs.map(async a => {
+      try { return agentFromChain(await registry.getAgent(a)); } catch { return null; }
+    }));
+    const live = profiles.filter(p => p && p.status === 1);
+    if (live.length > 0) {
+      state.agents = live;
+      addEvent("success", "🔗", "Agents loaded from chain", `${live.length} active on Somnia`);
+    }
+  } catch (e) { console.warn("loadChainData agents:", e); }
+
+  // ── Tasks ─────────────────────────────────────────────────────────────────
+  try {
+    const count  = Number(await market.taskCount());
+    const start  = Math.max(1, count - 99);
+    const ids    = Array.from({ length: count - start + 1 }, (_, i) => start + i);
+    const tasks  = await Promise.all(ids.map(async id => {
+      try { return taskFromChain(await market.getTask(id)); } catch { return null; }
+    }));
+    const valid = tasks.filter(Boolean).reverse();
+    if (valid.length > 0) {
+      state.tasks = valid;
+      recomputeMetrics();
+      addEvent("success", "📋", "Tasks loaded from chain", `${valid.length} tasks on Somnia`);
+    }
+  } catch (e) { console.warn("loadChainData tasks:", e); }
+
+  updateBadges();
+  if (["dashboard","agents","tasks","portfolio","analytics"].includes(state.view)) render();
+}
+
+// ── Live event polling (every 4 s when wallet connected) ──────────────────────
+let _pollFromBlock = null;
+let _pollInterval  = null;
+
+async function pollChainEvents() {
+  if (typeof ethers === "undefined") return;
+  try {
+    const provider = getReadProvider();
+    const market   = new ethers.Contract(CONTRACT_MARKET, MARKET_ABI_FULL, provider);
+
+    if (_pollFromBlock === null) {
+      _pollFromBlock = Math.max(0, (await provider.getBlockNumber()) - 20);
+    }
+    const current = await provider.getBlockNumber();
+    if (current <= _pollFromBlock) return;
+
+    const [posted, assigned, completed, disputed] = await Promise.all([
+      market.queryFilter(market.filters.TaskPosted(),     _pollFromBlock + 1, current),
+      market.queryFilter(market.filters.TaskAssigned(),   _pollFromBlock + 1, current),
+      market.queryFilter(market.filters.TaskCompleted(),  _pollFromBlock + 1, current),
+      market.queryFilter(market.filters.TaskDisputed(),   _pollFromBlock + 1, current),
+    ]);
+
+    let needsReload = false;
+
+    posted.forEach(ev => {
+      const id     = Number(ev.args.taskId);
+      const reward = Number(ethers.formatEther(ev.args.reward));
+      addEvent("info", "📋", `Task #${id} posted on-chain`, `${reward.toFixed(4)} STT escrowed`);
+      toast("info", `Task #${id} Posted`, `${reward.toFixed(4)} STT on Somnia`);
+      needsReload = true;
+    });
+
+    assigned.forEach(ev => {
+      const id    = Number(ev.args.taskId);
+      const agent = ev.args.agent.slice(0, 10) + "...";
+      addEvent("info", "🤝", `Task #${id} assigned`, `Agent ${agent}`);
+      needsReload = true;
+    });
+
+    completed.forEach(ev => {
+      const id    = Number(ev.args.taskId);
+      const score = Number(ev.args.qualityScore);
+      addEvent("success", "✅", `Task #${id} completed`, `Score: ${score}/100 · payment released`);
+      toast("success", `Task #${id} Complete!`, `Score ${score}/100 — STT distributed`);
+      needsReload = true;
+    });
+
+    disputed.forEach(ev => {
+      const id = Number(ev.args.taskId);
+      addEvent("warn", "⚠️", `Task #${id} disputed`, "Quality below 60 — funds held");
+      needsReload = true;
+    });
+
+    _pollFromBlock = current;
+    if (needsReload) await loadChainData();
+  } catch (e) { console.warn("pollChainEvents:", e); }
+}
+
+function startEventPolling() {
+  if (_pollInterval) clearInterval(_pollInterval);
+  _pollFromBlock = null;
+  _pollInterval  = setInterval(pollChainEvents, 4000);
+  pollChainEvents();
+}
+
+// ── Result preview helper ─────────────────────────────────────────────────────
+function parseResult(raw) {
+  if (!raw) return "";
+  try {
+    const d = JSON.parse(raw);
+    return (d.result || d.summary || raw).slice(0, 800);
+  } catch { return String(raw).slice(0, 800); }
+}
+
 // ── Boot ───────────────────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
   seedDemo();
@@ -1931,10 +2155,6 @@ document.addEventListener("DOMContentLoaded", () => {
   // Auto-spawn tasks every 20s in demo mode
   setInterval(() => { if (state.demoMode) autoSpawnTasks(); }, 20000);
 
-  // Ethers via CDN
-  if (typeof ethers === "undefined") {
-    const s = document.createElement("script");
-    s.src = "https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.0/ethers.umd.min.js";
-    document.head.appendChild(s);
-  }
+  // Load chain data immediately (read-only, no wallet needed for view functions)
+  loadChainData();
 });

@@ -70,7 +70,7 @@ def make_config(name: str, caps: list[Capability], key_env: str) -> AgentConfig:
         name=name,
         capabilities=caps,
         private_key=os.environ.get(key_env, os.environ["PRIVATE_KEY"]),
-        rpc_url=os.environ.get("SOMNIA_RPC_URL", "https://dream-rpc.somnia.network"),
+        rpc_url=os.environ.get("SOMNIA_RPC_URL", "https://api.infra.testnet.somnia.network/"),
     )
 
 

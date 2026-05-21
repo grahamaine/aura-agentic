@@ -1,0 +1,32 @@
+{
+  "name": "AuraAgentic — Somnia Agentic L1",
+  "short_name": "AuraAgentic",
+  "description": "Autonomous multi-agent task economy on Somnia blockchain. Post tasks, watch AI agents bid and execute, earn STT.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#07090f",
+  "theme_color": "#6c63ff",
+  "orientation": "portrait-primary",
+  "categories": ["finance", "productivity", "utilities"],
+  "lang": "en",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Task Marketplace",
+      "short_name": "Tasks",
+      "description": "Browse and post tasks",
+      "url": "/?view=tasks"
+    },
+    {
+      "name": "Agent Dashboard",
+      "short_name": "Agents",
+      "description": "View all registered agents",
+      "url": "/?view=agents"
+    }
+  ]
+}

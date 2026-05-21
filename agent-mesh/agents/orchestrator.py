@@ -197,10 +197,7 @@ class OrchestratorAgent(BaseAgent):
 
     async def _run_task(self, task_id: int, task: dict):
         try:
-            result = await asyncio.get_event_loop().run_in_executor(
-                None, lambda: self.execute_task(task)
-            )
-            # Store result as inline JSON (in production: IPFS hash)
+            result = await self.execute_task(task)
             result_hash = json.dumps({"result": result[:1000], "agent": self.address})
             await self.submit_result(task_id, result_hash)
         except Exception as e:

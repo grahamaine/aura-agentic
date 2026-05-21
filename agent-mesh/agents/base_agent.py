@@ -50,11 +50,21 @@ REGISTRY_ABI = json.loads("""[
   {"inputs":[{"internalType":"uint8","name":"cap","type":"uint8"}],
    "name":"getAgentsByCapability","outputs":[{"internalType":"address[]","name":"","type":"address[]"}],
    "stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"agent","type":"address"}],
+   "name":"isActive","outputs":[{"internalType":"bool","name":"","type":"bool"}],
+   "stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"totalAgents",
+   "outputs":[{"internalType":"uint256","name":"","type":"uint256"}],
+   "stateMutability":"view","type":"function"},
   {"anonymous":false,"inputs":[
      {"indexed":true,"internalType":"address","name":"agent","type":"address"},
      {"indexed":false,"internalType":"string","name":"name","type":"string"},
      {"indexed":false,"internalType":"uint8[]","name":"capabilities","type":"uint8[]"}],
-   "name":"AgentRegistered","type":"event"}
+   "name":"AgentRegistered","type":"event"},
+  {"anonymous":false,"inputs":[
+     {"indexed":true,"internalType":"address","name":"agent","type":"address"},
+     {"indexed":false,"internalType":"uint256","name":"newScore","type":"uint256"}],
+   "name":"ReputationUpdated","type":"event"}
 ]""")
 
 TASK_MARKET_ABI = json.loads("""[
@@ -65,6 +75,14 @@ TASK_MARKET_ABI = json.loads("""[
              {"internalType":"uint256","name":"deadline","type":"uint256"},
              {"internalType":"uint8","name":"priority","type":"uint8"}],
    "name":"postTask","outputs":[{"internalType":"uint256","name":"taskId","type":"uint256"}],
+   "stateMutability":"payable","type":"function"},
+  {"inputs":[{"internalType":"uint256","name":"parentId","type":"uint256"},
+             {"internalType":"string","name":"title","type":"string"},
+             {"internalType":"string","name":"description","type":"string"},
+             {"internalType":"string","name":"inputData","type":"string"},
+             {"internalType":"uint8","name":"requiredCapability","type":"uint8"},
+             {"internalType":"uint256","name":"deadline","type":"uint256"}],
+   "name":"postSubTask","outputs":[{"internalType":"uint256","name":"subTaskId","type":"uint256"}],
    "stateMutability":"payable","type":"function"},
   {"inputs":[{"internalType":"uint256","name":"taskId","type":"uint256"}],
    "name":"submitBid","outputs":[],"stateMutability":"nonpayable","type":"function"},
@@ -77,6 +95,10 @@ TASK_MARKET_ABI = json.loads("""[
   {"inputs":[{"internalType":"uint256","name":"taskId","type":"uint256"},
              {"internalType":"uint256","name":"qualityScore","type":"uint256"}],
    "name":"verifyAndPay","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"internalType":"address","name":"v","type":"address"}],
+   "name":"setVerifier","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"internalType":"uint256","name":"taskId","type":"uint256"}],
+   "name":"cancelTask","outputs":[],"stateMutability":"nonpayable","type":"function"},
   {"inputs":[{"internalType":"uint256","name":"taskId","type":"uint256"}],
    "name":"getTask","outputs":[{"components":[
      {"internalType":"uint256","name":"id","type":"uint256"},
@@ -99,6 +121,12 @@ TASK_MARKET_ABI = json.loads("""[
   {"inputs":[],"name":"getOpenTasks",
    "outputs":[{"internalType":"uint256[]","name":"","type":"uint256[]"}],
    "stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"uint256","name":"parentId","type":"uint256"}],
+   "name":"getSubTasks","outputs":[{"internalType":"uint256[]","name":"","type":"uint256[]"}],
+   "stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"uint256","name":"taskId","type":"uint256"}],
+   "name":"getBidders","outputs":[{"internalType":"address[]","name":"","type":"address[]"}],
+   "stateMutability":"view","type":"function"},
   {"inputs":[],"name":"taskCount",
    "outputs":[{"internalType":"uint256","name":"","type":"uint256"}],
    "stateMutability":"view","type":"function"},
@@ -110,12 +138,24 @@ TASK_MARKET_ABI = json.loads("""[
   {"anonymous":false,"inputs":[
      {"indexed":true,"internalType":"uint256","name":"taskId","type":"uint256"},
      {"indexed":true,"internalType":"address","name":"agent","type":"address"}],
+   "name":"BidSubmitted","type":"event"},
+  {"anonymous":false,"inputs":[
+     {"indexed":true,"internalType":"uint256","name":"taskId","type":"uint256"},
+     {"indexed":true,"internalType":"address","name":"agent","type":"address"}],
    "name":"TaskAssigned","type":"event"},
   {"anonymous":false,"inputs":[
      {"indexed":true,"internalType":"uint256","name":"taskId","type":"uint256"},
      {"indexed":true,"internalType":"address","name":"agent","type":"address"},
      {"indexed":false,"internalType":"uint256","name":"qualityScore","type":"uint256"}],
-   "name":"TaskCompleted","type":"event"}
+   "name":"TaskCompleted","type":"event"},
+  {"anonymous":false,"inputs":[
+     {"indexed":true,"internalType":"uint256","name":"taskId","type":"uint256"},
+     {"indexed":true,"internalType":"address","name":"disputer","type":"address"}],
+   "name":"TaskDisputed","type":"event"},
+  {"anonymous":false,"inputs":[
+     {"indexed":true,"internalType":"uint256","name":"parentId","type":"uint256"},
+     {"indexed":true,"internalType":"uint256","name":"subTaskId","type":"uint256"}],
+   "name":"SubTaskCreated","type":"event"}
 ]""")
 
 
@@ -143,7 +183,7 @@ class AgentConfig:
     name: str
     capabilities: list[Capability]
     private_key: str
-    rpc_url: str = "https://dream-rpc.somnia.network"
+    rpc_url: str = "https://api.infra.testnet.somnia.network/"
     registry_address: str = ""
     task_market_address: str = ""
     min_stake_wei: int = int(1e15)          # 0.001 STT

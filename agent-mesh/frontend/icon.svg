@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#0d1017"/>
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00d4ff"/>
+      <stop offset="50%" stop-color="#6c63ff"/>
+      <stop offset="100%" stop-color="#9333ea"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <!-- Outer hexagon ring -->
+  <polygon points="256,72 366,133 366,255 256,316 146,255 146,133" fill="none" stroke="url(#g)" stroke-width="6" opacity="0.35"/>
+  <!-- Central hub -->
+  <circle cx="256" cy="194" r="44" fill="url(#g)" filter="url(#glow)" opacity="0.9"/>
+  <!-- Satellite nodes -->
+  <circle cx="140" cy="328" r="30" fill="url(#g)" opacity="0.7"/>
+  <circle cx="256" cy="374" r="30" fill="url(#g)" opacity="0.7"/>
+  <circle cx="372" cy="328" r="30" fill="url(#g)" opacity="0.7"/>
+  <!-- Connections -->
+  <line x1="256" y1="238" x2="140" y2="328" stroke="url(#g)" stroke-width="3" opacity="0.5"/>
+  <line x1="256" y1="238" x2="256" y2="344" stroke="url(#g)" stroke-width="3" opacity="0.5"/>
+  <line x1="256" y1="238" x2="372" y2="328" stroke="url(#g)" stroke-width="3" opacity="0.5"/>
+  <!-- Inner dot in hub -->
+  <circle cx="256" cy="194" r="14" fill="#0d1017" opacity="0.6"/>
+</svg>
