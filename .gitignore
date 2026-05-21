@@ -39,3 +39,6 @@ typechain-types/
 
 # Vercel
 .vercel/
+
+# Stale nested repo clone (no source files, safe to ignore)
+AuraAgentic/
