@@ -185,8 +185,15 @@ function renderDashboard(root) {
   const avgQ = state.metrics.qualityCount > 0
     ? Math.round(state.metrics.qualitySum / state.metrics.qualityCount) : 0;
 
+  const chainConnected = state.blockNumber > 1000000;
   root.innerHTML = `
   <div class="view">
+    <!-- Chain status banner -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;padding:10px 14px;background:rgba(0,212,255,0.05);border:1px solid rgba(0,212,255,0.15);border-radius:var(--r-md)">
+      <span style="width:8px;height:8px;border-radius:50%;background:${chainConnected?"var(--green)":"var(--yellow)"};box-shadow:0 0 6px ${chainConnected?"var(--green)":"var(--yellow)"};flex-shrink:0;display:inline-block"></span>
+      <span style="font-size:0.72rem;color:var(--t2);letter-spacing:0.06em;text-transform:uppercase;flex:1">${chainConnected?"Somnia Testnet · Live chain data · Contracts deployed":"Connecting to Somnia Testnet…"}</span>
+      <a href="${EXPLORER_ADDR(CONTRACT_MARKET)}" target="_blank" style="font-size:0.65rem;color:var(--cyan);text-decoration:none;letter-spacing:0.05em">View on Explorer ↗</a>
+    </div>
     <!-- Stat row -->
     <div class="grid-4" style="margin-bottom:16px">
       ${statCard("Active Agents", state.agents.filter(a=>a.status===1).length, "🤖", "c-indigo", "live", "Live")}
@@ -1327,9 +1334,11 @@ function setWalletConnected(address) {
   const btn = document.getElementById("wallet-btn");
   if (!btn) return;
   btn.classList.add("connected");
+  const balLabel = state.balance && state.balance !== "0" ? `<span style="color:var(--cyan);font-family:var(--font-mono);font-size:0.68rem">${state.balance} STT</span>` : "";
   btn.innerHTML = `${WALLET_SVG}
-    <span class="wallet-addr">${address.slice(0,8)}...${address.slice(-4)}</span>
-    <span class="wallet-disconnect" onclick="event.stopPropagation();disconnectWallet()" title="Disconnect wallet">✕</span>`;
+    <span class="wallet-addr">${address.slice(0,6)}…${address.slice(-4)}</span>
+    ${balLabel}
+    <span class="wallet-disconnect" onclick="event.stopPropagation();disconnectWallet()" title="Disconnect">✕</span>`;
 }
 
 function setWalletDisconnected() {
@@ -1369,15 +1378,22 @@ async function connectWallet() {
     }
     const accounts = await window.ethereum.request({method:"eth_accounts"});
     state.wallet = accounts[0];
+
+    // Fetch STT balance
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const bal = await provider.getBalance(state.wallet);
+      state.balance = parseFloat(ethers.formatEther(bal)).toFixed(4);
+    } catch {}
+
     setWalletConnected(state.wallet);
     const dot = document.getElementById("net-dot");
     if (dot) dot.classList.add("connected");
     document.getElementById("net-label").textContent = "Somnia Testnet";
-    toast("success","Wallet Connected", state.wallet.slice(0,12)+"...");
-    addEvent("success","🔗","Wallet connected", state.wallet.slice(0,10)+"...");
-    // Load real chain data and start live event polling
+    toast("success", "Wallet Connected", `${state.wallet.slice(0,10)}… · ${state.balance} STT`);
+    addEvent("success","🔗","Wallet connected", `${state.wallet.slice(0,10)}… · ${state.balance} STT`);
+    // Reload chain data with wallet context (balance, owned tasks, etc.)
     loadChainData();
-    startEventPolling();
   } catch(e) {
     toast("error","Connection Failed", e.message?.slice(0,60));
   }
@@ -1868,7 +1884,7 @@ function renderPortfolio(root) {
 }
 
 // ── Live Somnia RPC ────────────────────────────────────────────────────────────
-async function rpc(method, params = [], url = MAINNET_RPC) {
+async function rpc(method, params = [], url = SOMNIA_RPC) {
   try {
     const r = await fetch(url, {
       method: "POST",
@@ -1896,32 +1912,37 @@ async function liveBlockTick() {
 }
 
 async function initNetworkStatus() {
-  const chainId  = await rpc("eth_chainId");
   const dot      = document.getElementById("net-dot");
   const netLabel = document.getElementById("net-label");
   const tpsEl    = document.getElementById("sidebar-tps");
   const finEl    = document.querySelector(".somnia-fin");
 
-  if (chainId === "0x13a7") {
+  // Confirm we're talking to Somnia testnet (chain 50312 = 0xC488)
+  const chainId = await rpc("eth_chainId");
+  if (chainId && parseInt(chainId, 16) === 50312) {
     if (dot)      dot.classList.add("connected");
-    if (netLabel) netLabel.textContent = "Somnia Mainnet";
-    addEvent("success", "⬡", "Somnia mainnet connected", "Chain 0x13a7 · <1s finality · live data");
+    if (netLabel) netLabel.textContent = "Somnia Testnet";
+    addEvent("success", "⬡", "Somnia testnet connected", "Chain 50312 · <1s finality · live data");
+  } else if (chainId) {
+    // Connected to some chain — show green and just label it
+    if (dot)      dot.classList.add("connected");
+    if (netLabel) netLabel.textContent = "Somnia RPC Live";
+    addEvent("success", "⬡", "Somnia RPC connected", "Block data live");
   }
 
   // Gas price → show as Gwei in sidebar footer
   const gpHex = await rpc("eth_gasPrice");
   if (gpHex && finEl) {
-    const gwei = (parseInt(gpHex, 16) / 1e9).toFixed(2);
+    const gwei = (parseInt(gpHex, 16) / 1e9).toFixed(3);
     finEl.textContent = gwei + " Gwei";
   }
 
-  // TPS via somnia_getStatistics(fromBlock, toBlock)
-  // Requires two params; compute transactions / elapsed_seconds over last 100 blocks
+  // TPS via somnia_getStatistics over last 100 blocks
   const latestHex = await rpc("eth_blockNumber");
   if (latestHex) {
-    const latest    = parseInt(latestHex, 16);
-    const fromNum   = Math.max(0, latest - 100);
-    const fromHex   = "0x" + fromNum.toString(16);
+    const latest  = parseInt(latestHex, 16);
+    const fromNum = Math.max(0, latest - 100);
+    const fromHex = "0x" + fromNum.toString(16);
 
     const [stats, fromBlock, toBlock] = await Promise.all([
       rpc("somnia_getStatistics", [fromHex, latestHex]),
@@ -1931,11 +1952,11 @@ async function initNetworkStatus() {
 
     if (stats && fromBlock && toBlock) {
       const txCount = parseInt(stats.numSuccessfulTransactions ?? "0x0", 16);
-      const t1      = parseInt(fromBlock.timestamp, 16);   // unix seconds
+      const t1      = parseInt(fromBlock.timestamp, 16);
       const t2      = parseInt(toBlock.timestamp,  16);
       const elapsed = t2 - t1;
       if (elapsed > 0 && tpsEl) {
-        const tps = Math.round(txCount / elapsed);
+        const tps     = Math.round(txCount / elapsed);
         const tpsText = tps > 0 ? tps.toLocaleString() + " TPS" : "1M+ TPS";
         tpsEl.textContent = tpsText;
         const niTps = document.getElementById("ni-tps");
@@ -2155,6 +2176,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Auto-spawn tasks every 20s in demo mode
   setInterval(() => { if (state.demoMode) autoSpawnTasks(); }, 20000);
 
-  // Load chain data immediately (read-only, no wallet needed for view functions)
+  // Load chain data and start live event polling immediately (no wallet needed — read-only)
   loadChainData();
+  startEventPolling();
 });
