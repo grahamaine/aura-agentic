@@ -1401,6 +1401,58 @@ body {
 .nis-val   { font-size: 0.9rem; font-weight: 800; margin-bottom: 2px; }
 .nis-label { font-size: 0.6rem; color: var(--t2); }
 
+/* ── Task progress tracker ─────────────────────────────────────────────────── */
+.tracker-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  overflow-x: auto;
+}
+
+.tracker-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.tracker-dot {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  border: 2px solid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  transition: all 0.3s;
+}
+
+.tracker-step-label {
+  font-size: 0.56rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.tracker-conn {
+  flex: 1;
+  height: 2px;
+  min-width: 12px;
+  transition: background 0.4s;
+  flex-shrink: 1;
+}
+
+.tracker-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
 /* ── Sentinel nav highlight ────────────────────────────────────────────────── */
 .sentinel-nav { border-left: 2px solid transparent; }
 .sentinel-nav:hover { border-left-color: var(--cyan); }

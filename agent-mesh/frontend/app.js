@@ -597,37 +597,73 @@ function renderTasks(root) {
       </div>
 
       <!-- Right: post task -->
-      <div class="card" style="position:sticky;top:70px">
-        <div class="card-header"><h2>➕ Post New Task</h2></div>
-        <div class="card-body">
-          <div class="form-group">
-            <label class="form-label">Task Title</label>
-            <input class="form-input" id="f-title" placeholder="e.g. Research Somnia DeFi TVL" />
+      <div style="display:flex;flex-direction:column;gap:14px;position:sticky;top:70px">
+        <div class="card">
+          <div class="card-header">
+            <h2>➕ Post New Task</h2>
+            <span style="font-size:0.62rem;color:${state.wallet?"var(--green)":"var(--yellow)"}">${state.wallet?"● Wallet connected":"● No wallet"}</span>
           </div>
-          <div class="form-group">
-            <label class="form-label">Description</label>
-            <textarea class="form-textarea" id="f-desc" placeholder="Detailed task requirements..."></textarea>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Required Capability</label>
-            <select class="form-select" id="f-cap">
-              ${CAP_LABELS.map((l,i)=>`<option value="${i}">${l}</option>`).join("")}
-            </select>
-          </div>
-          <div class="two-col" style="gap:10px">
+          <div class="card-body">
             <div class="form-group">
-              <label class="form-label">Reward (STT)</label>
-              <input class="form-input" id="f-reward" type="number" value="0.01" min="0.001" step="0.001"/>
+              <label class="form-label">Task Title</label>
+              <input class="form-input" id="f-title" placeholder="e.g. Research Somnia DeFi TVL" />
             </div>
             <div class="form-group">
-              <label class="form-label">Deadline (min)</label>
-              <input class="form-input" id="f-deadline" type="number" value="30" min="5"/>
+              <label class="form-label">Description</label>
+              <textarea class="form-textarea" id="f-desc" placeholder="Detailed requirements..." style="min-height:60px"></textarea>
             </div>
+            <div class="form-group">
+              <label class="form-label">Required Capability</label>
+              <select class="form-select" id="f-cap">
+                ${CAP_LABELS.map((l,i)=>`<option value="${i}">${AGENT_EMOJIS[i]} ${l}</option>`).join("")}
+              </select>
+            </div>
+            <div class="two-col" style="gap:10px">
+              <div class="form-group">
+                <label class="form-label">Reward (STT)</label>
+                <input class="form-input" id="f-reward" type="number" value="0.01" min="0.001" step="0.001"/>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Deadline (min)</label>
+                <input class="form-input" id="f-deadline" type="number" value="30" min="5"/>
+              </div>
+            </div>
+
+            <!-- Primary: on-chain -->
+            <button class="btn btn-primary btn-full" id="post-btn" onclick="postTask()" style="margin-bottom:8px">
+              ⬡ Post on Somnia Chain
+            </button>
+
+            <!-- Secondary: demo mode -->
+            <button class="btn btn-full" onclick="postTaskDemo()"
+              style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);color:var(--yellow);font-size:0.72rem;padding:8px;letter-spacing:0.06em;text-transform:uppercase;border-radius:var(--r-sm);cursor:pointer;transition:opacity .15s">
+              ▶ Demo Post (No Wallet Required)
+            </button>
+
+            <div id="post-status" style="margin-top:10px;line-height:1.4"></div>
           </div>
-          <button class="btn btn-primary btn-full" id="post-btn" onclick="postTask()">
-            🚀 Post Task &amp; Escrow STT
-          </button>
-          <div id="post-status" style="margin-top:10px"></div>
+        </div>
+
+        <!-- Quick-fill templates -->
+        <div class="card">
+          <div class="card-header"><h2>⚡ Quick Templates</h2></div>
+          <div class="card-body" style="padding:8px 12px;display:flex;flex-direction:column;gap:6px">
+            ${[
+              ["Research Somnia DeFi TVL trends", 0, 0.008],
+              ["Build a Python price feed aggregator", 1, 0.012],
+              ["Analyse on-chain agent activity", 2, 0.006],
+              ["Verify latest agent result quality", 3, 0.004],
+            ].map(([t,c,r]) => `
+              <button onclick="fillTemplate(${JSON.stringify(t)},${c},${r})"
+                style="display:flex;align-items:center;gap:8px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:7px 10px;cursor:pointer;width:100%;text-align:left;transition:border-color .15s"
+                onmouseover="this.style.borderColor='var(--indigo)'" onmouseout="this.style.borderColor='var(--border)'">
+                <span style="font-size:0.9rem">${AGENT_EMOJIS[c]}</span>
+                <div>
+                  <div style="font-size:0.72rem;color:var(--t1)">${t}</div>
+                  <div style="font-size:0.6rem;color:var(--t3)">${CAP_LABELS[c]} · ${r} STT</div>
+                </div>
+              </button>`).join("")}
+          </div>
         </div>
       </div>
     </div>
@@ -1101,53 +1137,205 @@ function activityItemHTML(ev) {
 }
 
 // ── Modals ─────────────────────────────────────────────────────────────────────
+// ── Task progress tracker modal ───────────────────────────────────────────────
+let _modalPoll = null;
+
 function openTaskModal(task) {
-  const cap = task.cap ?? task.requiredCapability ?? 0;
+  _renderTaskTracker(task);
+  showModal();
+
+  // Live polling: refresh tracker every 3s while open
+  clearInterval(_modalPoll);
+  _modalPoll = setInterval(async () => {
+    const overlay = document.getElementById("modal-overlay");
+    if (!overlay || overlay.classList.contains("hidden")) { clearInterval(_modalPoll); return; }
+    // Try to get fresh data from chain
+    let fresh = state.tasks.find(t => t.id === task.id);
+    if (fresh && !fresh.isDemo && state.wallet) {
+      try {
+        const provider = getReadProvider();
+        const market   = new ethers.Contract(CONTRACT_MARKET, MARKET_ABI_FULL, provider);
+        const raw      = await market.getTask(task.id);
+        fresh = taskFromChain(raw);
+        const idx = state.tasks.findIndex(t => t.id === task.id);
+        if (idx >= 0) state.tasks[idx] = fresh;
+        recomputeMetrics();
+      } catch {}
+    }
+    if (fresh) { task = fresh; _renderTaskTracker(task); }
+  }, 3000);
+}
+
+function _renderTaskTracker(task) {
+  const cap   = task.cap ?? 0;
   const color = CAP_COLORS[cap];
-  document.getElementById("modal-content").innerHTML = `
-    <h2 style="font-size:1rem;margin-bottom:16px;padding-right:28px">Task #${task.id}: ${esc(task.title)}</h2>
-    <div class="modal-section">
-      <label>Status</label>
-      <div class="val"><span class="task-badge ${STATUS_CLS[task.status]}">${STATUS_LABELS[task.status]}</span></div>
-    </div>
-    <div class="two-col">
-      <div class="modal-section">
-        <label>Capability</label>
-        <div class="val" style="color:${color}">${CAP_LABELS[cap]}</div>
+
+  // 6 pipeline steps
+  const STEPS = ["Posted","Bids Open","Assigned","Executing","Verifying","Complete"];
+  const stepFor = s => s === 0 ? 1 : s === 1 ? 2 : s === 2 ? 2 : s === 3 ? 3 : s === 4 ? 5 : s >= 4 ? 5 : 1;
+  const currentStep = stepFor(task.status);
+
+  const stepHTML = STEPS.map((label, i) => {
+    const done    = i < currentStep;
+    const active  = i === currentStep;
+    const disputed = task.status === 5 && i === 5;
+    const bg = disputed ? "var(--red)" : done || active ? color : "var(--bg3)";
+    const bc = disputed ? "var(--red)" : done || active ? color : "var(--border)";
+    const tc = disputed ? "#fff"       : done || active ? "#fff"  : "var(--t3)";
+    return `
+      <div class="tracker-step">
+        <div class="tracker-dot" style="background:${bg};border-color:${bc};color:${tc}">
+          ${done ? "✓" : disputed && i === 5 ? "!" : i + 1}
+        </div>
+        <div class="tracker-step-label" style="color:${active?(disputed?"var(--red)":color):"var(--t3)"}">${label}</div>
       </div>
-      <div class="modal-section">
-        <label>Reward</label>
-        <div class="val" style="color:var(--cyan);font-weight:700">${task.reward.toFixed(4)} STT</div>
+      ${i < STEPS.length - 1 ? `<div class="tracker-conn" style="background:${done?color:"var(--border)"}"></div>` : ""}
+    `;
+  }).join("");
+
+  // Timeline events
+  const tl = buildTaskTimeline(task);
+
+  // Agent card
+  const agentInfo = task.assigned ? (() => {
+    const ag = state.agents.find(a => a.id?.toLowerCase() === task.assigned?.toLowerCase());
+    if (!ag) return `<div class="val mono" style="font-size:0.7rem">${task.assigned.slice(0,10)}…${task.assigned.slice(-4)}</div>`;
+    return `<div style="display:flex;align-items:center;gap:10px">
+      <div style="width:36px;height:36px;border-radius:50%;background:${CAP_BG[ag.caps[0]??0]};color:${CAP_COLORS[ag.caps[0]??0]};display:flex;align-items:center;justify-content:center;font-size:1rem">${AGENT_EMOJIS[ag.caps[0]??0]}</div>
+      <div>
+        <div style="font-size:0.82rem;font-weight:600">${ag.name}</div>
+        <div style="font-size:0.65rem;color:var(--t2)">Rep ${ag.rep} · ${ag.tasks} tasks completed</div>
       </div>
-    </div>
-    ${task.quality > 0 ? `
+    </div>`;
+  })() : `<div style="color:var(--t3);font-size:0.75rem">Awaiting bids…</div>`;
+
+  // Quality
+  const qualityHTML = task.quality > 0 ? `
     <div class="modal-section">
       <label>Quality Score</label>
       <div class="quality-display">
         <div class="quality-bar-wrap"><div class="quality-bar-fill" style="width:${task.quality}%"></div></div>
         <div class="quality-val" style="color:${task.quality>=75?"var(--green)":task.quality>=60?"var(--yellow)":"var(--red)"}">${task.quality}/100</div>
       </div>
-    </div>` : ""}
+    </div>` : "";
+
+  // Result
+  const resultHTML = task.resultHash ? `
+    <div class="modal-section">
+      <label>Result ${task.status >= 4 ? "✅ Verified" : "⏳ Pending Verification"}</label>
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 12px;font-size:0.72rem;color:var(--t1);max-height:180px;overflow-y:auto;white-space:pre-wrap;line-height:1.6;font-family:var(--font-mono)">${esc(parseResult(task.resultHash))}</div>
+    </div>` : (task.status >= 2 ? `
+    <div class="modal-section">
+      <label>Result</label>
+      <div style="color:var(--t3);font-size:0.72rem;display:flex;align-items:center;gap:6px">
+        <span class="demo-dot" style="display:inline-block"></span> Agent executing — result pending…
+      </div>
+    </div>` : "");
+
+  // Demo badge
+  const demoBadge = task.isDemo ? `<span style="background:rgba(245,158,11,0.15);color:var(--yellow);font-size:0.6rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:2px 8px;border-radius:10px;margin-left:8px">DEMO</span>` : "";
+
+  document.getElementById("modal-content").innerHTML = `
+    <!-- Header -->
+    <div style="padding-right:28px;margin-bottom:16px">
+      <div style="font-size:0.62rem;color:var(--t3);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px">Task #${task.id} ${demoBadge}</div>
+      <h2 style="font-size:1rem;font-weight:600;line-height:1.4">${esc(task.title)}</h2>
+    </div>
+
+    <!-- Progress stepper -->
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-md);padding:14px 16px;margin-bottom:16px">
+      <div style="font-size:0.6rem;color:var(--t3);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:10px">Progress</div>
+      <div class="tracker-row">${stepHTML}</div>
+      <div style="text-align:center;margin-top:8px;font-size:0.68rem;font-weight:600;color:${task.status===5?"var(--red)":color}">${task.status===5?"⚠️ Disputed":STATUS_LABELS[task.status]}</div>
+    </div>
+
+    <!-- Key stats -->
+    <div class="grid-4" style="margin-bottom:14px;gap:8px">
+      <div style="background:var(--bg3);border-radius:var(--r-sm);padding:10px;text-align:center">
+        <div style="font-size:0.88rem;font-weight:700;color:${color}">${CAP_LABELS[cap]}</div>
+        <div style="font-size:0.58rem;color:var(--t3);text-transform:uppercase;letter-spacing:0.06em;margin-top:2px">Capability</div>
+      </div>
+      <div style="background:var(--bg3);border-radius:var(--r-sm);padding:10px;text-align:center">
+        <div style="font-size:0.88rem;font-weight:700;color:var(--cyan)">${task.reward.toFixed(4)}</div>
+        <div style="font-size:0.58rem;color:var(--t3);text-transform:uppercase;letter-spacing:0.06em;margin-top:2px">STT Reward</div>
+      </div>
+      <div style="background:var(--bg3);border-radius:var(--r-sm);padding:10px;text-align:center">
+        <div style="font-size:0.88rem;font-weight:700;color:var(--indigo)">${task.bidders}</div>
+        <div style="font-size:0.58rem;color:var(--t3);text-transform:uppercase;letter-spacing:0.06em;margin-top:2px">Bids</div>
+      </div>
+      <div style="background:var(--bg3);border-radius:var(--r-sm);padding:10px;text-align:center">
+        <div style="font-size:0.88rem;font-weight:700;color:${task.quality>0?(task.quality>=75?"var(--green)":"var(--yellow)"):"var(--t3)"}">${task.quality>0?task.quality+"/100":"—"}</div>
+        <div style="font-size:0.58rem;color:var(--t3);text-transform:uppercase;letter-spacing:0.06em;margin-top:2px">Quality</div>
+      </div>
+    </div>
+
+    <!-- Assigned agent -->
     <div class="modal-section">
       <label>Assigned Agent</label>
-      <div class="val mono">${task.assigned || "None yet"}</div>
+      ${agentInfo}
     </div>
+
+    ${qualityHTML}
+    ${resultHTML}
+
+    <!-- Timeline -->
     <div class="modal-section">
-      <label>Posted</label>
-      <div class="val">${new Date(task.created*1000).toLocaleString()}</div>
+      <label>Timeline</label>
+      <div class="tracker-timeline">${tl}</div>
     </div>
-    ${task.resultHash ? `
-    <div class="modal-section">
-      <label>AI Result ${task.status >= 4 ? "(Verified)" : "(Pending verification)"}</label>
-      <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 12px;font-size:0.72rem;color:var(--t1);max-height:220px;overflow-y:auto;white-space:pre-wrap;line-height:1.55;font-family:var(--font-mono)">${esc(parseResult(task.resultHash))}</div>
-    </div>` : ""}
-    <div style="margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <a href="${EXPLORER_TESTNET}address/${CONTRACT_MARKET}" target="_blank" style="color:var(--indigo);font-size:0.78rem;text-decoration:none">
-        View on Somnia Explorer →
+
+    <!-- Actions -->
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px">
+      <a href="${EXPLORER_TESTNET}address/${CONTRACT_MARKET}" target="_blank"
+         style="font-size:0.72rem;color:var(--indigo);text-decoration:none;letter-spacing:0.02em">
+        View on Explorer ↗
       </a>
-      ${task.status === 0 && state.wallet ? `<button class="btn btn-primary" style="font-size:0.72rem;padding:5px 12px" onclick="closeModal();navigate('tasks')">Post a Bid →</button>` : ""}
+      ${!task.isDemo ? `<a href="${EXPLORER_TESTNET}tx/" target="_blank"
+         style="font-size:0.72rem;color:var(--t3);text-decoration:none">Tx History ↗</a>` : ""}
+      <span style="flex:1"></span>
+      <span style="font-size:0.65rem;color:var(--t3)">Auto-refreshes every 3s</span>
     </div>`;
-  showModal();
+}
+
+function buildTaskTimeline(task) {
+  const entries = [];
+  const now = Math.floor(Date.now() / 1000);
+
+  entries.push({ icon:"📋", text:`Task posted`, time: task.created, color:"var(--indigo)" });
+
+  if (task.bidders > 0)
+    entries.push({ icon:"🤝", text:`${task.bidders} bid${task.bidders!==1?"s":""} received`, time: task.created + 30, color:"var(--yellow)" });
+
+  if (task.assigned) {
+    const ag = state.agents.find(a => a.id?.toLowerCase() === task.assigned?.toLowerCase());
+    const name = ag ? ag.name : task.assigned.slice(0,10)+"…";
+    entries.push({ icon:"🤖", text:`Assigned to ${name}`, time: task.created + 60, color:"var(--cyan)" });
+  }
+
+  if (task.status >= 2)
+    entries.push({ icon:"⚙️", text:"Agent executing task", time: task.created + 90, color:"var(--purple)", pulse: task.status === 2 });
+
+  if (task.status >= 3)
+    entries.push({ icon:"🔍", text:"Verifier scoring result", time: task.created + 150, color:"var(--yellow)", pulse: task.status === 3 });
+
+  if (task.status === 4)
+    entries.push({ icon:"✅", text:`Completed · quality ${task.quality}/100 · ${task.reward.toFixed(4)} STT paid`, time: now, color:"var(--green)" });
+
+  if (task.status === 5)
+    entries.push({ icon:"⚠️", text:"Task disputed", time: now, color:"var(--red)" });
+
+  return entries.map((e, i) => `
+    <div style="display:flex;gap:8px;align-items:flex-start;${i>0?"margin-top:10px":""}">
+      <div style="width:22px;height:22px;border-radius:50%;background:${e.color}22;color:${e.color};display:flex;align-items:center;justify-content:center;font-size:0.7rem;flex-shrink:0;margin-top:1px${e.pulse?";animation:pulse 1.2s infinite":""}">
+        ${e.icon}
+      </div>
+      <div style="flex:1">
+        <div style="font-size:0.75rem;color:var(--t1)">${e.text}</div>
+        <div style="font-size:0.62rem;color:var(--t3);margin-top:1px">${timeAgo(e.time)}</div>
+      </div>
+      ${i === entries.length - 1 && e.pulse ? `<span class="demo-dot" style="display:inline-block;flex-shrink:0;margin-top:6px"></span>` : ""}
+    </div>
+  `).join("")  || `<div style="color:var(--t3);font-size:0.72rem">No events yet</div>`;
 }
 
 function openAgentModal(ag) {
@@ -1198,61 +1386,148 @@ function showModal() {
 
 function closeModal() {
   document.getElementById("modal-overlay").classList.add("hidden");
+  clearInterval(_modalPoll);
+  _modalPoll = null;
 }
 
-// ── Post task ─────────────────────────────────────────────────────────────────
+// ── Network guard — ensures MetaMask is on Somnia testnet before any TX ──────
+async function ensureSomniaNetwork() {
+  if (!window.ethereum) throw new Error("MetaMask is not installed");
+  const current = await window.ethereum.request({ method: "eth_chainId" });
+  if (current === SOMNIA_CHAIN_ID) return;  // already correct
+  setPostStatus("Switching to Somnia Testnet…", "var(--yellow)");
+  try {
+    await window.ethereum.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId: SOMNIA_CHAIN_ID }],
+    });
+  } catch (sw) {
+    if (sw.code === 4902) {
+      await window.ethereum.request({
+        method: "wallet_addEthereumChain",
+        params: [{
+          chainId: SOMNIA_CHAIN_ID,
+          chainName: "Somnia Testnet (Shannon)",
+          nativeCurrency: { name: "STT", symbol: "STT", decimals: 18 },
+          rpcUrls: [SOMNIA_RPC],
+          blockExplorerUrls: [EXPLORER_TESTNET],
+        }],
+      });
+    } else throw sw;
+  }
+}
+
+// ── Post task (on-chain via MetaMask) ─────────────────────────────────────────
 async function postTask() {
-  const title      = document.getElementById("f-title")?.value?.trim();
-  const desc       = document.getElementById("f-desc")?.value?.trim() || title;
-  const cap        = parseInt(document.getElementById("f-cap")?.value ?? "0");
-  const reward     = parseFloat(document.getElementById("f-reward")?.value ?? "0.01");
+  const title       = document.getElementById("f-title")?.value?.trim();
+  const desc        = document.getElementById("f-desc")?.value?.trim() || title;
+  const cap         = parseInt(document.getElementById("f-cap")?.value ?? "0");
+  const reward      = parseFloat(document.getElementById("f-reward")?.value ?? "0.01");
   const deadlineMin = parseInt(document.getElementById("f-deadline")?.value ?? "30");
 
   if (!title) { setPostStatus("Enter a task title.", "var(--red)"); return; }
 
-  const btn = document.getElementById("post-btn");
-  if (btn) { btn.disabled = true; btn.textContent = "⏳ Posting..."; }
-
-  // ── Real on-chain transaction ─────────────────────────────────────────────
-  if (state.wallet && typeof ethers !== "undefined") {
-    try {
-      setPostStatus("Waiting for MetaMask signature...", "var(--indigo)");
-      const signer  = await getWriteSigner();
-      const market  = new ethers.Contract(CONTRACT_MARKET, MARKET_ABI_FULL, signer);
-      const deadline = Math.floor(Date.now() / 1000) + deadlineMin * 60;
-      const value    = ethers.parseEther(reward.toFixed(6));
-
-      const tx = await market.postTask(title, desc, "{}", cap, deadline, 1, { value });
-      setPostStatus("Confirming on Somnia (<1s)...", "var(--cyan)");
-      if (btn) btn.textContent = "⏳ Confirming...";
-
-      const receipt = await tx.wait();
-      const txHash  = receipt.hash.slice(0, 14) + "...";
-      setPostStatus(`✅ Posted on-chain · TX: ${txHash}`, "var(--green)");
-      toast("success", "Task Posted!", `${reward} STT escrowed on Somnia`);
-      addEvent("success", "📋", `Task posted on-chain`, `${reward} STT escrowed · ${txHash}`);
-      await loadChainData();
-    } catch (e) {
-      setPostStatus(`Error: ${(e.message || e).slice(0, 80)}`, "var(--red)");
-      toast("error", "Transaction Failed", (e.message || "").slice(0, 60));
-    } finally {
-      if (btn) { btn.disabled = false; btn.textContent = "🚀 Post Task & Escrow STT"; }
-    }
-    return;
-  }
-
-  // ── Demo fallback (no wallet) ─────────────────────────────────────────────
   if (!state.wallet) {
-    setPostStatus("Connect your wallet to post a real on-chain task.", "var(--yellow)");
-    if (btn) { btn.disabled = false; btn.textContent = "🚀 Post Task & Escrow STT"; }
-    toast("warn", "Wallet Required", "Connect MetaMask to post tasks on Somnia");
+    setPostStatus("Wallet not connected — use Demo Post below, or connect MetaMask.", "var(--yellow)");
     return;
   }
+
+  const btn = document.getElementById("post-btn");
+  if (btn) { btn.disabled = true; btn.textContent = "⏳ Signing…"; }
+
+  try {
+    // 1. Make sure we're on Somnia testnet
+    await ensureSomniaNetwork();
+
+    setPostStatus("Waiting for MetaMask signature…", "var(--indigo)");
+    const signer   = await getWriteSigner();
+    const market   = new ethers.Contract(CONTRACT_MARKET, MARKET_ABI_FULL, signer);
+    const deadline = Math.floor(Date.now() / 1000) + deadlineMin * 60;
+    const value    = ethers.parseEther(reward.toFixed(6));
+
+    // 2. Send transaction
+    const tx = await market.postTask(title, desc, "{}", cap, deadline, 1, { value });
+    setPostStatus("Confirming on Somnia (<1s)…", "var(--cyan)");
+    if (btn) btn.textContent = "⏳ Confirming…";
+
+    // 3. Wait for receipt
+    const receipt  = await tx.wait();
+    const txHash   = receipt.hash;
+    const shortHash = txHash.slice(0, 12) + "…";
+
+    setPostStatus(`✅ On-chain! TX: <a href="${EXPLORER_TESTNET}tx/${txHash}" target="_blank" style="color:var(--cyan)">${shortHash}</a>`, "var(--green)");
+    document.getElementById("post-status").innerHTML = document.getElementById("post-status").innerHTML; // flush
+    toast("success", "Task Posted!", `${reward} STT escrowed · ${shortHash}`);
+    addEvent("success", "📋", "Task posted on-chain", `${reward} STT · ${shortHash}`);
+
+    // 4. Clear form and reload
+    ["f-title","f-desc"].forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
+    await loadChainData();
+  } catch (e) {
+    const msg = e.reason || e.message || String(e);
+    setPostStatus("❌ " + msg.slice(0, 100), "var(--red)");
+    toast("error", "Transaction Failed", msg.slice(0, 80));
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "🚀 Post Task on Somnia"; }
+  }
+}
+
+// ── Demo post (no wallet — runs simulation locally) ───────────────────────────
+function postTaskDemo() {
+  const title  = document.getElementById("f-title")?.value?.trim();
+  const desc   = document.getElementById("f-desc")?.value?.trim() || title;
+  const cap    = parseInt(document.getElementById("f-cap")?.value ?? "0");
+  const reward = parseFloat(document.getElementById("f-reward")?.value ?? "0.01");
+
+  if (!title) { setPostStatus("Enter a task title first.", "var(--red)"); return; }
+
+  const now = Math.floor(Date.now() / 1000);
+  const newId = (state.tasks.length > 0 ? Math.max(...state.tasks.map(t => t.id)) : 0) + 1;
+
+  const demoTask = {
+    id:         newId,
+    title,
+    cap,
+    status:     0,
+    reward,
+    poster:     state.wallet || "0xDemo",
+    assigned:   null,
+    quality:    0,
+    created:    now,
+    bidders:    0,
+    resultHash: "",
+    inputData:  JSON.stringify({ demo: true }),
+    isDemo:     true,
+  };
+
+  state.tasks.unshift(demoTask);
+  recomputeMetrics();
+  if (state.view === "tasks") render();
+
+  setPostStatus(`✅ Demo task #${newId} live — agents bidding in 2s…`, "var(--green)");
+  toast("info", "Demo Task Created", `#${newId}: ${title}`);
+  addEvent("info", "📋", `Demo task #${newId}`, `${CAP_LABELS[cap]} · ${reward} STT`);
+
+  // Auto-open the tracker for this task
+  setTimeout(() => openTaskModal(demoTask), 400);
+
+  // Run the simulation pipeline
+  setTimeout(() => simulateBidAndAssign(newId), 1800);
 }
 
 function setPostStatus(msg, color) {
   const el = document.getElementById("post-status");
-  if (el) { el.style.color = color; el.style.fontSize = "0.75rem"; el.textContent = msg; }
+  if (!el) return;
+  el.style.color = color;
+  el.style.fontSize = "0.75rem";
+  el.innerHTML = msg;
+}
+
+function fillTemplate(title, cap, reward) {
+  const t = document.getElementById("f-title"); if (t) t.value = title;
+  const c = document.getElementById("f-cap");   if (c) c.value = cap;
+  const r = document.getElementById("f-reward"); if (r) r.value = reward;
+  setPostStatus("Template loaded — click Post to submit.", "var(--cyan)");
 }
 
 // ── Demo simulation engine ─────────────────────────────────────────────────────
