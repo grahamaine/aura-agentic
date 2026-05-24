@@ -1,0 +1,1176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AuraGuard — Real-Time Contract Risk Intelligence</title>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.9.0/dist/ethers.umd.min.js"></script>
+  <style>
+    /* ── Reset & Base ──────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:         #0a0c10;
+      --bg2:        #0f1117;
+      --bg3:        #141820;
+      --border:     #1e2433;
+      --text:       #e2e8f0;
+      --text-dim:   #64748b;
+      --cyan:       #00d4ff;
+      --purple:     #7c3aed;
+      --purple-dim: #4c1d95;
+      --green:      #22c55e;
+      --yellow:     #eab308;
+      --orange:     #f97316;
+      --red:        #ef4444;
+      --red-dark:   #7f1d1d;
+      --critical:   #dc2626;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+      font-size: 13px;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Animated background grid ──────────────────────────────────────────── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Header ────────────────────────────────────────────────────────────── */
+    header {
+      position: relative;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 24px;
+      background: linear-gradient(135deg, #0d1117 0%, #0f1420 100%);
+      border-bottom: 1px solid var(--border);
+      box-shadow: 0 2px 20px rgba(0,212,255,0.08);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-icon {
+      font-size: 28px;
+      filter: drop-shadow(0 0 8px rgba(0,212,255,0.6));
+    }
+
+    .logo-text h1 {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--cyan);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      text-shadow: 0 0 20px rgba(0,212,255,0.4);
+    }
+
+    .logo-text p {
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 1px;
+    }
+
+    .header-stats {
+      display: flex;
+      gap: 24px;
+      align-items: center;
+    }
+
+    .stat-pill {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      padding: 6px 14px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    .stat-pill .value { font-size: 18px; font-weight: 700; color: var(--cyan); }
+    .stat-pill .label { font-size: 9px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; }
+
+    .live-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background: rgba(34,197,94,0.1);
+      border: 1px solid var(--green);
+      border-radius: 20px;
+      color: var(--green);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+    }
+
+    .live-dot {
+      width: 8px; height: 8px;
+      background: var(--green);
+      border-radius: 50%;
+      animation: pulse-green 1.5s infinite;
+    }
+
+    @keyframes pulse-green {
+      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(34,197,94,0.4); }
+      50% { opacity: 0.7; box-shadow: 0 0 0 6px rgba(34,197,94,0); }
+    }
+
+    /* ── Layout ────────────────────────────────────────────────────────────── */
+    .main {
+      position: relative;
+      z-index: 5;
+      display: grid;
+      grid-template-columns: 320px 1fr 280px;
+      grid-template-rows: auto 1fr;
+      gap: 0;
+      height: calc(100vh - 60px);
+    }
+
+    /* ── Panel base ────────────────────────────────────────────────────────── */
+    .panel {
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: var(--text-dim);
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .panel-header .icon { font-size: 14px; margin-right: 6px; }
+
+    .panel-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+    }
+
+    .panel-body::-webkit-scrollbar { width: 4px; }
+    .panel-body::-webkit-scrollbar-track { background: var(--bg); }
+    .panel-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* ── LEFT: Live Scan Feed ──────────────────────────────────────────────── */
+    #scan-feed { grid-column: 1; grid-row: 1 / 3; }
+
+    .scan-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .scan-card:hover { border-color: var(--cyan); background: var(--bg3); }
+
+    .scan-card::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 3px;
+      border-radius: 8px 0 0 8px;
+    }
+
+    .scan-card.SAFE::before    { background: var(--green); }
+    .scan-card.LOW::before     { background: var(--yellow); }
+    .scan-card.MEDIUM::before  { background: var(--orange); }
+    .scan-card.HIGH::before    { background: var(--red); }
+    .scan-card.CRITICAL::before { background: var(--critical); animation: pulse-red 1s infinite; }
+    .scan-card.SCANNING::before { background: var(--cyan); animation: scan-pulse 0.8s infinite; }
+
+    @keyframes pulse-red { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
+    @keyframes scan-pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+
+    .scan-card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 5px;
+    }
+
+    .contract-addr {
+      font-size: 11px;
+      color: var(--cyan);
+      font-weight: 600;
+    }
+
+    .risk-badge {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+
+    .risk-badge.SAFE     { background: rgba(34,197,94,0.15); color: var(--green); border: 1px solid var(--green); }
+    .risk-badge.LOW      { background: rgba(234,179,8,0.15);  color: var(--yellow); border: 1px solid var(--yellow); }
+    .risk-badge.MEDIUM   { background: rgba(249,115,22,0.15); color: var(--orange); border: 1px solid var(--orange); }
+    .risk-badge.HIGH     { background: rgba(239,68,68,0.15);  color: var(--red); border: 1px solid var(--red); }
+    .risk-badge.CRITICAL { background: rgba(220,38,38,0.2);   color: #fca5a5; border: 1px solid var(--critical); animation: pulse-red 1s infinite; }
+    .risk-badge.SCANNING { background: rgba(0,212,255,0.1);   color: var(--cyan); border: 1px solid var(--cyan); }
+
+    .scan-card-summary { font-size: 10px; color: var(--text-dim); margin-bottom: 5px; line-height: 1.4; }
+
+    .scan-score-bar {
+      height: 4px;
+      background: var(--bg);
+      border-radius: 2px;
+      overflow: hidden;
+      margin: 4px 0;
+    }
+
+    .scan-score-fill {
+      height: 100%;
+      border-radius: 2px;
+      transition: width 1s ease;
+    }
+
+    .scan-meta {
+      display: flex;
+      justify-content: space-between;
+      font-size: 9px;
+      color: var(--text-dim);
+      margin-top: 4px;
+    }
+
+    /* Scanning animation card */
+    .scan-card.SCANNING {
+      animation: card-appear 0.3s ease;
+    }
+
+    @keyframes card-appear {
+      from { opacity: 0; transform: translateY(-10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .scanning-dots::after {
+      content: '';
+      animation: dots 1.2s infinite;
+    }
+    @keyframes dots {
+      0%   { content: '.'; }
+      33%  { content: '..'; }
+      66%  { content: '...'; }
+      100% { content: ''; }
+    }
+
+    /* ── CENTER: Main Dashboard ────────────────────────────────────────────── */
+    #center-panel { grid-column: 2; grid-row: 1 / 3; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+
+    /* Risk radar / meter */
+    .risk-meter-section {
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg2);
+    }
+
+    .risk-meter-title {
+      text-align: center;
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    .risk-meter-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+    }
+
+    #risk-gauge-canvas { display: block; }
+
+    .risk-meter-legend {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 10px;
+    }
+
+    .legend-dot {
+      width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0;
+    }
+
+    /* Task stream */
+    #task-stream { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+
+    .task-event {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 8px 14px;
+      border-bottom: 1px solid rgba(30,36,51,0.5);
+      animation: event-appear 0.3s ease;
+      transition: background 0.2s;
+    }
+
+    .task-event:hover { background: var(--bg3); }
+
+    @keyframes event-appear {
+      from { opacity: 0; background: rgba(0,212,255,0.05); }
+      to   { opacity: 1; background: transparent; }
+    }
+
+    .event-time { font-size: 9px; color: var(--text-dim); flex-shrink: 0; margin-top: 2px; width: 52px; }
+
+    .event-icon { font-size: 14px; flex-shrink: 0; }
+
+    .event-body { flex: 1; min-width: 0; }
+    .event-title { font-size: 11px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .event-detail { font-size: 10px; color: var(--text-dim); margin-top: 1px; }
+
+    /* ── RIGHT: Agent Status ───────────────────────────────────────────────── */
+    #agent-panel { grid-column: 3; grid-row: 1 / 3; border-right: none; }
+
+    .agent-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 6px;
+      transition: all 0.2s;
+    }
+
+    .agent-card.active { border-color: rgba(0,212,255,0.3); }
+    .agent-card.working { border-color: var(--purple); box-shadow: 0 0 10px rgba(124,58,237,0.15); }
+
+    .agent-top {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .agent-status-dot {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    }
+    .agent-status-dot.idle     { background: var(--text-dim); }
+    .agent-status-dot.active   { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .agent-status-dot.working  { background: var(--purple); animation: pulse-purple 1s infinite; box-shadow: 0 0 6px var(--purple); }
+    .agent-status-dot.error    { background: var(--red); }
+
+    @keyframes pulse-purple { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+
+    .agent-name { font-size: 11px; font-weight: 700; color: var(--text); }
+    .agent-capability { font-size: 9px; color: var(--text-dim); margin-left: auto; letter-spacing: 0.5px; }
+
+    .agent-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 4px;
+    }
+
+    .agent-stat {
+      background: var(--bg);
+      border-radius: 4px;
+      padding: 4px 6px;
+      text-align: center;
+    }
+    .agent-stat .v { font-size: 14px; font-weight: 700; color: var(--cyan); display: block; }
+    .agent-stat .l { font-size: 8px; color: var(--text-dim); letter-spacing: 0.5px; }
+
+    .agent-current {
+      margin-top: 6px;
+      font-size: 9px;
+      color: var(--text-dim);
+      padding: 4px 8px;
+      background: var(--bg);
+      border-radius: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ── Config modal ──────────────────────────────────────────────────────── */
+    #config-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(10,12,16,0.9);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .config-modal {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px;
+      width: 480px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+
+    .config-modal h2 {
+      font-size: 16px;
+      color: var(--cyan);
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .config-modal p {
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-bottom: 20px;
+      line-height: 1.6;
+    }
+
+    .config-field { margin-bottom: 14px; }
+    .config-field label { display: block; font-size: 10px; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 5px; }
+    .config-field input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 12px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 12px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .config-field input:focus { border-color: var(--cyan); }
+
+    .config-btn {
+      width: 100%;
+      padding: 10px;
+      background: linear-gradient(135deg, var(--purple), #6d28d9);
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: 1px;
+      transition: all 0.2s;
+    }
+    .config-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(124,58,237,0.4); }
+
+    /* ── Notification toast ────────────────────────────────────────────────── */
+    #toast-container {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 500;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .toast {
+      padding: 10px 16px;
+      background: var(--bg2);
+      border-left: 3px solid var(--cyan);
+      border-radius: 6px;
+      font-size: 11px;
+      max-width: 320px;
+      animation: toast-in 0.3s ease;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    }
+
+    .toast.critical { border-left-color: var(--critical); color: #fca5a5; animation: toast-in 0.3s ease, toast-shake 0.5s ease 0.3s; }
+
+    @keyframes toast-in { from { opacity:0; transform: translateX(20px); } to { opacity:1; transform: translateX(0); } }
+    @keyframes toast-shake { 0%,100% { transform:translateX(0); } 25% { transform:translateX(-4px); } 75% { transform:translateX(4px); } }
+
+    /* ── Search ────────────────────────────────────────────────────────────── */
+    .search-bar {
+      display: flex;
+      gap: 6px;
+      padding: 8px 14px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+    }
+
+    .search-bar input {
+      flex: 1;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 11px;
+      outline: none;
+    }
+    .search-bar input:focus { border-color: var(--cyan); }
+
+    .search-btn {
+      padding: 6px 12px;
+      background: var(--purple);
+      border: none;
+      border-radius: 6px;
+      color: white;
+      font-family: inherit;
+      font-size: 11px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    /* ── Detail panel (bottom of center) ──────────────────────────────────── */
+    #detail-panel {
+      height: 180px;
+      border-top: 1px solid var(--border);
+      background: var(--bg2);
+      padding: 12px 16px;
+      overflow-y: auto;
+      flex-shrink: 0;
+    }
+
+    .detail-empty { color: var(--text-dim); font-size: 11px; text-align: center; margin-top: 40px; }
+  </style>
+</head>
+<body>
+
+<!-- ── Config Overlay ────────────────────────────────────────────────────── -->
+<div id="config-overlay">
+  <div class="config-modal">
+    <h2>🛡️ AuraGuard Dashboard</h2>
+    <p>Enter your deployed contract addresses to connect to the live Somnia testnet feed.</p>
+
+    <div class="config-field">
+      <label>RiskRegistry Address</label>
+      <input id="cfg-risk-registry" placeholder="0x…" value="" />
+    </div>
+    <div class="config-field">
+      <label>TaskMarket Address</label>
+      <input id="cfg-task-market" placeholder="0x…" value="" />
+    </div>
+    <div class="config-field">
+      <label>Somnia RPC URL</label>
+      <input id="cfg-rpc" value="https://api.infra.testnet.somnia.network/" />
+    </div>
+
+    <button class="config-btn" onclick="App.connect()">🔌 Connect to AuraGuard Swarm</button>
+  </div>
+</div>
+
+<!-- ── Header ─────────────────────────────────────────────────────────────── -->
+<header>
+  <div class="logo">
+    <span class="logo-icon">🛡️</span>
+    <div class="logo-text">
+      <h1>AuraGuard</h1>
+      <p>AUTONOMOUS DEFI SECURITY · POWERED BY AURAGENTIC × SOMNIA</p>
+    </div>
+  </div>
+  <div class="header-stats">
+    <div class="stat-pill">
+      <span class="value" id="stat-scanned">0</span>
+      <span class="label">Scanned</span>
+    </div>
+    <div class="stat-pill">
+      <span class="value" id="stat-critical" style="color:var(--red)">0</span>
+      <span class="label">Critical</span>
+    </div>
+    <div class="stat-pill">
+      <span class="value" id="stat-tasks">0</span>
+      <span class="label">Tasks</span>
+    </div>
+    <div class="stat-pill">
+      <span class="value" id="stat-agents" style="color:var(--green)">0</span>
+      <span class="label">Agents</span>
+    </div>
+    <div class="live-badge">
+      <div class="live-dot"></div>
+      LIVE
+    </div>
+  </div>
+</header>
+
+<!-- ── Main Grid ──────────────────────────────────────────────────────────── -->
+<div class="main">
+
+  <!-- LEFT: Live Scan Feed -->
+  <div class="panel" id="scan-feed">
+    <div class="panel-header">
+      <span><span class="icon">🔍</span>Live Scan Feed</span>
+      <span id="scan-count" style="color:var(--cyan)">0 scans</span>
+    </div>
+    <div class="panel-body" id="scan-list">
+      <div style="text-align:center;color:var(--text-dim);padding:40px 0;font-size:11px;">
+        Waiting for new contract deployments...<br>
+        <span style="font-size:9px;opacity:0.5;margin-top:8px;display:block">
+          AuraGuard watches every Somnia block in real-time
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- CENTER -->
+  <div id="center-panel">
+
+    <!-- Risk gauge -->
+    <div class="risk-meter-section">
+      <div class="risk-meter-title">⚡ Network Risk Level — Last 10 Contracts</div>
+      <div class="risk-meter-container">
+        <canvas id="risk-gauge-canvas" width="160" height="100"></canvas>
+        <div class="risk-meter-legend">
+          <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div> SAFE (0-20)</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--yellow)"></div> LOW (21-49)</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--orange)"></div> MEDIUM (50-74)</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div> HIGH (75-89)</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--critical)"></div> CRITICAL (90+)</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <div style="text-align:center">
+            <div id="gauge-score" style="font-size:36px;font-weight:700;color:var(--cyan);line-height:1;">--</div>
+            <div style="font-size:9px;color:var(--text-dim);letter-spacing:1px;">AVG RISK SCORE</div>
+          </div>
+          <div style="font-size:10px;color:var(--text-dim);text-align:center" id="gauge-label">Waiting...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Search -->
+    <div class="search-bar">
+      <input id="search-input" placeholder="🔍 Look up any contract address: 0x…" />
+      <button class="search-btn" onclick="App.lookupContract()">SCAN</button>
+    </div>
+
+    <!-- Task event stream -->
+    <div id="task-stream" style="flex:1;overflow:hidden;display:flex;flex-direction:column;">
+      <div class="panel-header" style="flex-shrink:0">
+        <span><span class="icon">⚡</span>Live Agent Activity</span>
+        <span id="event-count" style="color:var(--purple)">0 events</span>
+      </div>
+      <div class="panel-body" id="event-list" style="flex:1;">
+        <div style="text-align:center;color:var(--text-dim);padding:30px 0;font-size:11px;">
+          Agent activity will appear here when contracts are being scanned...
+        </div>
+      </div>
+    </div>
+
+    <!-- Detail -->
+    <div id="detail-panel">
+      <div class="detail-empty">Click a scan card to view full vulnerability report</div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Agent Status -->
+  <div class="panel" id="agent-panel">
+    <div class="panel-header">
+      <span><span class="icon">🤖</span>Agent Swarm</span>
+      <span id="agent-online" style="color:var(--green)">0 online</span>
+    </div>
+    <div class="panel-body" id="agent-list">
+      <!-- Agents rendered by JS -->
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Toast container ────────────────────────────────────────────────────── -->
+<div id="toast-container"></div>
+
+<!-- ── App Script ─────────────────────────────────────────────────────────── -->
+<script>
+// ─── ABI (minimal) ────────────────────────────────────────────────────────────
+const RISK_REGISTRY_ABI = [
+  { inputs: [{ name: "contractAddr", type: "address" }], name: "getReport",
+    outputs: [{ components: [
+      { name: "contractAddr", type: "address" }, { name: "riskScore", type: "uint8" },
+      { name: "confidence", type: "uint8" },    { name: "taskId", type: "uint256" },
+      { name: "scanner", type: "address" },     { name: "scannedAt", type: "uint256" },
+      { name: "summary", type: "string" },      { name: "exists", type: "bool" }
+    ], type: "tuple" }], stateMutability: "view", type: "function" },
+  { inputs: [{ name: "count", type: "uint256" }], name: "getRecentScans",
+    outputs: [{ name: "", type: "address[]" }], stateMutability: "view", type: "function" },
+  { inputs: [], name: "totalScanned", outputs: [{ name: "", type: "uint256" }], stateMutability: "view", type: "function" },
+  { inputs: [], name: "criticalCount", outputs: [{ name: "", type: "uint256" }], stateMutability: "view", type: "function" },
+  { anonymous: false, inputs: [
+      { indexed: true, name: "contractAddr", type: "address" },
+      { indexed: false, name: "riskScore", type: "uint8" },
+      { indexed: false, name: "confidence", type: "uint8" },
+      { indexed: true, name: "taskId", type: "uint256" },
+      { indexed: true, name: "scanner", type: "address" },
+      { indexed: false, name: "summary", type: "string" }
+    ], name: "ContractScanned", type: "event" }
+];
+
+const MARKET_ABI = [
+  { inputs: [], name: "taskCount", outputs: [{ name: "", type: "uint256" }], stateMutability: "view", type: "function" },
+  { anonymous: false, inputs: [
+      { indexed: true, name: "taskId", type: "uint256" },
+      { indexed: true, name: "poster", type: "address" },
+      { indexed: false, name: "reward", type: "uint256" }
+    ], name: "TaskPosted", type: "event" },
+  { anonymous: false, inputs: [
+      { indexed: true, name: "taskId", type: "uint256" },
+      { indexed: true, name: "agent", type: "address" }
+    ], name: "BidSubmitted", type: "event" },
+  { anonymous: false, inputs: [
+      { indexed: true, name: "taskId", type: "uint256" },
+      { indexed: true, name: "agent", type: "address" }
+    ], name: "TaskAssigned", type: "event" },
+  { anonymous: false, inputs: [
+      { indexed: true, name: "taskId", type: "uint256" },
+      { indexed: true, name: "agent", type: "address" },
+      { indexed: false, name: "qualityScore", type: "uint256" }
+    ], name: "TaskCompleted", type: "event" }
+];
+
+// ─── State ─────────────────────────────────────────────────────────────────────
+const App = {
+  provider: null,
+  riskRegistry: null,
+  market: null,
+  scans: [],          // { addr, score, confidence, summary, scannedAt, status }
+  events: [],
+  recentScores: [],   // last 10 risk scores for gauge
+  eventCount: 0,
+  pollInterval: null,
+  lastBlock: 0,
+
+  agentDefs: [
+    { name: "AuditOrchestrator", icon: "🎯", cap: "Orchestration", status: "idle", tasks: 0, completed: 0, current: "Waiting..." },
+    { name: "SecurityAgent",     icon: "🔬", cap: "Analysis",       status: "idle", tasks: 0, completed: 0, current: "Waiting..." },
+    { name: "SimulationAgent",   icon: "⚡", cap: "CodeGen",        status: "idle", tasks: 0, completed: 0, current: "Waiting..." },
+    { name: "SocialIntelAgent",  icon: "🕵️", cap: "Research",       status: "idle", tasks: 0, completed: 0, current: "Waiting..." },
+    { name: "VerifierAgent",     icon: "✅", cap: "Verification",   status: "idle", tasks: 0, completed: 0, current: "Waiting..." },
+    { name: "Sentinel",          icon: "👁",  cap: "Watcher",        status: "active", tasks: 0, completed: 0, current: "Watching blocks..." },
+  ],
+
+  async connect() {
+    const rpcUrl = document.getElementById('cfg-rpc').value.trim();
+    const rrAddr = document.getElementById('cfg-risk-registry').value.trim();
+    const mktAddr = document.getElementById('cfg-task-market').value.trim();
+
+    if (!rrAddr || !mktAddr) { alert('Please enter both contract addresses.'); return; }
+
+    try {
+      this.provider = new ethers.JsonRpcProvider(rpcUrl);
+      this.riskRegistry = new ethers.Contract(rrAddr, RISK_REGISTRY_ABI, this.provider);
+      this.market       = new ethers.Contract(mktAddr, MARKET_ABI, this.provider);
+
+      // Test connection
+      const block = await this.provider.getBlockNumber();
+      this.lastBlock = block;
+
+      document.getElementById('config-overlay').style.display = 'none';
+      this.toast(`✅ Connected to Somnia — Block #${block}`, 3000);
+
+      this.renderAgents();
+      await this.loadRecentScans();
+      this.startPolling();
+      this.listenEvents();
+      this.drawGauge(0);
+    } catch(e) {
+      alert(`Connection failed: ${e.message}`);
+    }
+  },
+
+  async loadRecentScans() {
+    try {
+      const addrs = await this.riskRegistry.getRecentScans(20n);
+      for (const addr of addrs) {
+        const report = await this.riskRegistry.getReport(addr);
+        if (report.exists) {
+          this.addScan({
+            addr: report.contractAddr,
+            score: Number(report.riskScore),
+            confidence: Number(report.confidence),
+            summary: report.summary,
+            scannedAt: Number(report.scannedAt),
+            taskId: Number(report.taskId),
+          });
+        }
+      }
+      await this.updateStats();
+    } catch(e) {
+      console.warn('loadRecentScans:', e);
+    }
+  },
+
+  startPolling() {
+    this.pollInterval = setInterval(() => this.poll(), 3000);
+  },
+
+  async poll() {
+    try {
+      const block = await this.provider.getBlockNumber();
+      if (block > this.lastBlock) {
+        this.lastBlock = block;
+        await this.updateStats();
+      }
+    } catch(e) {}
+  },
+
+  listenEvents() {
+    if (!this.riskRegistry) return;
+
+    // Listen for new scan results
+    this.riskRegistry.on('ContractScanned', (contractAddr, riskScore, confidence, taskId, scanner, summary) => {
+      const score = Number(riskScore);
+      this.addScan({ addr: contractAddr, score, confidence: Number(confidence),
+                     summary, scannedAt: Math.floor(Date.now()/1000), taskId: Number(taskId) });
+      this.updateStats();
+
+      const label = this.scoreLabel(score);
+      if (score >= 90) {
+        this.toast(`💀 CRITICAL: ${contractAddr.slice(0,12)}… — ${summary.slice(0,60)}`, 8000, 'critical');
+      } else if (score >= 75) {
+        this.toast(`🔴 HIGH RISK: ${contractAddr.slice(0,12)}… — Score ${score}/100`, 5000);
+      }
+
+      this.addEvent('🛡️', `Risk score published: ${contractAddr.slice(0,14)}…`,
+                    `${label} (${score}/100) — Task #${taskId}`, label.includes('CRITICAL') ? '#dc2626' : '#7c3aed');
+    });
+
+    // Listen for new tasks
+    if (this.market) {
+      this.market.on('TaskPosted', (taskId, poster, reward) => {
+        this.addEvent('📋', `New task #${taskId} posted`, `Reward: ${ethers.formatEther(reward)} STT`, '#00d4ff');
+        document.getElementById('stat-tasks').textContent =
+          String(parseInt(document.getElementById('stat-tasks').textContent || '0') + 1);
+      });
+
+      this.market.on('BidSubmitted', (taskId, agent) => {
+        this.addEvent('🤝', `Bid on Task #${taskId}`, `Agent: ${agent.slice(0,14)}…`, '#7c3aed');
+        this.markAgentWorking(agent);
+      });
+
+      this.market.on('TaskAssigned', (taskId, agent) => {
+        this.addEvent('⚡', `Task #${taskId} assigned`, `Agent: ${agent.slice(0,14)}…`, '#f97316');
+      });
+
+      this.market.on('TaskCompleted', (taskId, agent, qualityScore) => {
+        this.addEvent('✅', `Task #${taskId} completed`, `Quality: ${qualityScore}/100 | Agent: ${agent.slice(0,14)}…`, '#22c55e');
+      });
+    }
+  },
+
+  markAgentWorking(agentAddr) {
+    // Update a random agent to "working" state for demo visual
+    const agents = this.agentDefs.filter(a => a.status !== 'working');
+    if (agents.length > 0) {
+      const idx = Math.floor(Math.random() * agents.length);
+      agents[idx].status = 'working';
+      agents[idx].tasks++;
+      setTimeout(() => {
+        agents[idx].status = 'active';
+        agents[idx].completed++;
+        this.renderAgents();
+      }, 8000 + Math.random() * 15000);
+      this.renderAgents();
+    }
+  },
+
+  addScan(scan) {
+    // Remove duplicate
+    this.scans = this.scans.filter(s => s.addr.toLowerCase() !== scan.addr.toLowerCase());
+    this.scans.unshift(scan);
+    if (this.scans.length > 50) this.scans.pop();
+
+    this.recentScores.unshift(scan.score);
+    if (this.recentScores.length > 10) this.recentScores.pop();
+
+    this.renderScans();
+    this.updateGauge();
+    document.getElementById('scan-count').textContent = `${this.scans.length} scans`;
+  },
+
+  renderScans() {
+    const list = document.getElementById('scan-list');
+    if (this.scans.length === 0) return;
+
+    list.innerHTML = this.scans.map(s => {
+      const level = this.scoreLevel(s.score);
+      const color = this.scoreColor(s.score);
+      const fillPct = s.score;
+      const timeStr = s.scannedAt ? new Date(s.scannedAt * 1000).toLocaleTimeString() : '--:--:--';
+
+      return `
+        <div class="scan-card ${level}" onclick="App.showDetail('${s.addr}')">
+          <div class="scan-card-top">
+            <span class="contract-addr">${s.addr.slice(0,14)}…${s.addr.slice(-4)}</span>
+            <span class="risk-badge ${level}">${this.scoreLabel(s.score)}</span>
+          </div>
+          <div class="scan-card-summary">${(s.summary || '').slice(0, 80)}${s.summary && s.summary.length > 80 ? '…' : ''}</div>
+          <div class="scan-score-bar">
+            <div class="scan-score-fill" style="width:${fillPct}%;background:${color}"></div>
+          </div>
+          <div class="scan-meta">
+            <span>${timeStr}</span>
+            <span style="color:${color}">${s.score}/100 · ${s.confidence}% confidence</span>
+          </div>
+        </div>`;
+    }).join('');
+  },
+
+  renderAgents() {
+    const list = document.getElementById('agent-list');
+    const online = this.agentDefs.filter(a => a.status !== 'idle').length;
+    document.getElementById('agent-online').textContent = `${online} online`;
+    document.getElementById('stat-agents').textContent = String(online);
+
+    list.innerHTML = this.agentDefs.map(a => `
+      <div class="agent-card ${a.status}">
+        <div class="agent-top">
+          <div class="agent-status-dot ${a.status}"></div>
+          <span style="font-size:14px">${a.icon}</span>
+          <span class="agent-name">${a.name}</span>
+          <span class="agent-capability">${a.cap}</span>
+        </div>
+        <div class="agent-stats">
+          <div class="agent-stat"><span class="v">${a.tasks}</span><span class="l">TASKS</span></div>
+          <div class="agent-stat"><span class="v">${a.completed}</span><span class="l">DONE</span></div>
+          <div class="agent-stat"><span class="v" style="color:var(--green)">${a.status === 'active' ? '●' : a.status === 'working' ? '⚙' : '○'}</span><span class="l">STATUS</span></div>
+        </div>
+        <div class="agent-current">${a.current}</div>
+      </div>
+    `).join('');
+  },
+
+  addEvent(icon, title, detail, color = '#64748b') {
+    this.eventCount++;
+    document.getElementById('event-count').textContent = `${this.eventCount} events`;
+
+    const list = document.getElementById('event-list');
+    if (list.querySelector('.detail-empty') || list.textContent.includes('Agent activity')) {
+      list.innerHTML = '';
+    }
+
+    const time = new Date().toLocaleTimeString();
+    const el = document.createElement('div');
+    el.className = 'task-event';
+    el.innerHTML = `
+      <span class="event-time">${time}</span>
+      <span class="event-icon">${icon}</span>
+      <div class="event-body">
+        <div class="event-title" style="color:${color}">${title}</div>
+        <div class="event-detail">${detail}</div>
+      </div>`;
+    list.insertBefore(el, list.firstChild);
+
+    // Keep max 100 events
+    while (list.children.length > 100) list.removeChild(list.lastChild);
+  },
+
+  async showDetail(addr) {
+    const panel = document.getElementById('detail-panel');
+    panel.innerHTML = '<div style="color:var(--text-dim);font-size:11px">Loading report…</div>';
+    try {
+      const report = await this.riskRegistry.getReport(addr);
+      const score  = Number(report.riskScore);
+      const color  = this.scoreColor(score);
+      const label  = this.scoreLabel(score);
+
+      panel.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span style="color:var(--cyan);font-size:11px;font-weight:700">${addr.slice(0,22)}…</span>
+          <span class="risk-badge ${this.scoreLevel(score)}">${label}</span>
+        </div>
+        <div style="font-size:10px;color:var(--text-dim);margin-bottom:8px">${report.summary}</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
+          <div style="background:var(--bg);border-radius:4px;padding:6px;text-align:center">
+            <div style="font-size:20px;font-weight:700;color:${color}">${score}</div>
+            <div style="font-size:8px;color:var(--text-dim)">RISK SCORE</div>
+          </div>
+          <div style="background:var(--bg);border-radius:4px;padding:6px;text-align:center">
+            <div style="font-size:20px;font-weight:700;color:var(--cyan)">${Number(report.confidence)}</div>
+            <div style="font-size:8px;color:var(--text-dim)">CONFIDENCE</div>
+          </div>
+          <div style="background:var(--bg);border-radius:4px;padding:6px;text-align:center">
+            <div style="font-size:14px;font-weight:700;color:var(--purple)">#${Number(report.taskId)}</div>
+            <div style="font-size:8px;color:var(--text-dim)">TASK ID</div>
+          </div>
+          <div style="background:var(--bg);border-radius:4px;padding:6px;text-align:center">
+            <div style="font-size:11px;font-weight:700;color:var(--text)">${report.scanner.slice(0,8)}…</div>
+            <div style="font-size:8px;color:var(--text-dim)">SCANNER</div>
+          </div>
+        </div>
+        <div style="margin-top:8px;font-size:9px;color:var(--text-dim)">
+          📡 Scanned at ${new Date(Number(report.scannedAt) * 1000).toLocaleString()} ·
+          <a href="https://shannon-explorer.somnia.network/address/${addr}" target="_blank"
+             style="color:var(--cyan)">View on Explorer ↗</a>
+        </div>`;
+    } catch(e) {
+      panel.innerHTML = `<div style="color:var(--red);font-size:11px">Failed to load: ${e.message}</div>`;
+    }
+  },
+
+  async lookupContract() {
+    const addr = document.getElementById('search-input').value.trim();
+    if (!addr || !addr.startsWith('0x')) { this.toast('Enter a valid contract address (0x…)', 3000); return; }
+
+    // Add as "SCANNING" card
+    const existing = this.scans.find(s => s.addr.toLowerCase() === addr.toLowerCase());
+    if (!existing) {
+      this.addEvent('🔍', `Manual scan requested`, addr.slice(0,20) + '…', '#00d4ff');
+      this.toast(`🔍 Looking up ${addr.slice(0,14)}…`, 3000);
+    }
+    await this.showDetail(addr);
+  },
+
+  async updateStats() {
+    try {
+      const [total, critical] = await Promise.all([
+        this.riskRegistry.totalScanned(),
+        this.riskRegistry.criticalCount(),
+      ]);
+      document.getElementById('stat-scanned').textContent  = total.toString();
+      document.getElementById('stat-critical').textContent = critical.toString();
+    } catch(e) {}
+
+    try {
+      const tasks = await this.market.taskCount();
+      document.getElementById('stat-tasks').textContent = tasks.toString();
+    } catch(e) {}
+  },
+
+  updateGauge() {
+    if (this.recentScores.length === 0) return;
+    const avg = Math.round(this.recentScores.reduce((a,b) => a+b, 0) / this.recentScores.length);
+    document.getElementById('gauge-score').textContent = avg;
+    document.getElementById('gauge-label').textContent = this.scoreLabel(avg);
+    document.getElementById('gauge-label').style.color = this.scoreColor(avg);
+    this.drawGauge(avg);
+  },
+
+  drawGauge(score) {
+    const canvas = document.getElementById('risk-gauge-canvas');
+    const ctx = canvas.getContext('2d');
+    const cx = 80, cy = 90, r = 65;
+    const startAngle = Math.PI;
+    const endAngle   = 2 * Math.PI;
+
+    ctx.clearRect(0, 0, 160, 100);
+
+    // Background arc
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, startAngle, endAngle);
+    ctx.strokeStyle = '#1e2433';
+    ctx.lineWidth = 14;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+
+    // Colored arc
+    const progress = score / 100;
+    const color = this.scoreColor(score);
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, startAngle, startAngle + progress * Math.PI);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 14;
+    ctx.lineCap = 'round';
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 12;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Needle
+    const needleAngle = startAngle + progress * Math.PI;
+    const nx = cx + (r - 20) * Math.cos(needleAngle);
+    const ny = cy + (r - 20) * Math.sin(needleAngle);
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(nx, ny);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+
+    // Center dot
+    ctx.beginPath();
+    ctx.arc(cx, cy, 5, 0, 2 * Math.PI);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+  },
+
+  scoreLevel(score) {
+    if (score <= 20)  return 'SAFE';
+    if (score <= 49)  return 'LOW';
+    if (score <= 74)  return 'MEDIUM';
+    if (score <= 89)  return 'HIGH';
+    return 'CRITICAL';
+  },
+
+  scoreLabel(score) {
+    if (score <= 20)  return '✅ SAFE';
+    if (score <= 49)  return '🟡 LOW RISK';
+    if (score <= 74)  return '🟠 MEDIUM';
+    if (score <= 89)  return '🔴 HIGH RISK';
+    return '💀 CRITICAL';
+  },
+
+  scoreColor(score) {
+    if (score <= 20)  return '#22c55e';
+    if (score <= 49)  return '#eab308';
+    if (score <= 74)  return '#f97316';
+    if (score <= 89)  return '#ef4444';
+    return '#dc2626';
+  },
+
+  toast(msg, duration = 4000, type = '') {
+    const container = document.getElementById('toast-container');
+    const el = document.createElement('div');
+    el.className = `toast ${type}`;
+    el.textContent = msg;
+    container.appendChild(el);
+    setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity 0.3s'; setTimeout(() => el.remove(), 300); }, duration);
+  },
+};
+
+// ── Pre-fill from URL params ──────────────────────────────────────────────────
+const params = new URLSearchParams(location.search);
+if (params.get('rr'))  document.getElementById('cfg-risk-registry').value = params.get('rr');
+if (params.get('mkt')) document.getElementById('cfg-task-market').value   = params.get('mkt');
+if (params.get('rpc')) document.getElementById('cfg-rpc').value           = params.get('rpc');
+
+// Auto-connect if all params present
+if (params.get('rr') && params.get('mkt')) {
+  setTimeout(() => App.connect(), 500);
+}
+
+// Initialize gauge
+App.drawGauge(0);
+App.renderAgents();
+</script>
+</body>
+</html>

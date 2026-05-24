@@ -61,6 +61,55 @@ class Detection:
 # ── Sentinel detection rules ──────────────────────────────────────────────────
 
 RULES = [
+    # ── AuraGuard Rules (new) ─────────────────────────────────────────────────
+    dict(
+        name="new_contract_deployed",
+        label="⚠️  New Contract Deployed",
+        cap=Capability.Orchestration,
+        reward_eth=0.003,
+        cooldown=3,           # Low cooldown — every new contract should be scanned
+        title="[AURA GUARD] 🔍 Scan new contract: {detail}",
+        description=(
+            "A new smart contract was just deployed on Somnia. "
+            "AuraGuard autonomous security swarm: coordinate a full 3-agent audit. "
+            "Post sub-tasks to SecurityAgent (static scan), SimulationAgent (attack sim), "
+            "and SocialIntelAgent (deployer profiling). "
+            "Synthesise a final RISK_SCORE (0-100) and write it to the RiskRegistry on-chain. "
+            "Input JSON contains: contract_address, deployer, tx_hash, block_number, timestamp."
+        ),
+    ),
+    dict(
+        name="large_transfer_detected",
+        label="🐋 Large Token Transfer",
+        cap=Capability.Analysis,
+        reward_eth=0.002,
+        cooldown=20,
+        title="[AURA GUARD] 🐋 Large transfer detected — {detail}",
+        description=(
+            "An unusually large token transfer was detected on Somnia. "
+            "Analyse: (1) Is this wallet a known deployer or whale? "
+            "(2) Could this be a coordinated dump or LP removal? "
+            "(3) Is there a related contract at risk? "
+            "Return JSON: {wallet_profile, transfer_risk, related_contracts, alert_level}."
+        ),
+    ),
+    dict(
+        name="rapid_deploy_pattern",
+        label="🏭 Rapid Contract Deployment",
+        cap=Capability.Research,
+        reward_eth=0.002,
+        cooldown=60,
+        title="[AURA GUARD] 🏭 Rapid deployment pattern: {detail}",
+        description=(
+            "Multiple contracts were deployed from the same wallet within a short window. "
+            "Research: (1) Is this a known scam factory pattern? "
+            "(2) What do the deployed contracts have in common? "
+            "(3) Are any already attracting user funds? "
+            "Return JSON: {factory_pattern, contracts, risk_assessment, recommended_action}."
+        ),
+    ),
+
+    # ── Existing AgentMesh Rules ───────────────────────────────────────────────
     dict(
         name="new_agent",
         label="New Agent Registered",
@@ -137,6 +186,9 @@ RULES = [
         ),
     ),
 ]
+
+# Track deployer → block windows for rapid-deploy detection
+_deploy_tracker: dict[str, list[int]] = {}
 
 
 # ── Sentinel agent ────────────────────────────────────────────────────────────
@@ -221,9 +273,54 @@ class SentinelAgent(BaseAgent):
         market_lc   = self._market.address.lower()
         registry_lc = self._registry.address.lower()
         block_market_txs = 0
+        block_deployers: list[str] = []   # deployers this block
 
         for tx in block.transactions:
             to = (tx.get("to") or "").lower()
+
+            # ── 🆕 AuraGuard: Contract Deployment Detection ───────────────────
+            if not tx.get("to"):  # null 'to' = contract creation
+                sender = tx["from"]
+                try:
+                    receipt = await self.w3.eth.get_transaction_receipt(tx.hash)
+                    if receipt and receipt.get("contractAddress"):
+                        deployed_addr = receipt["contractAddress"]
+                        block_deployers.append(sender.lower())
+
+                        # Track rapid-deploy pattern
+                        if sender.lower() not in _deploy_tracker:
+                            _deploy_tracker[sender.lower()] = []
+                        _deploy_tracker[sender.lower()].append(block_num)
+                        # Keep only last 20 blocks
+                        _deploy_tracker[sender.lower()] = [
+                            b for b in _deploy_tracker[sender.lower()]
+                            if block_num - b <= 20
+                        ]
+
+                        # Fire scan task with full context
+                        detail = json.dumps({
+                            "contract_address": deployed_addr,
+                            "deployer": sender,
+                            "tx_hash": tx.hash.hex(),
+                            "block_number": block_num,
+                            "timestamp": time.time(),
+                        })
+                        await self._fire("new_contract_deployed", deployed_addr)
+
+                        # Check for rapid-deploy factory pattern (>3 contracts in 20 blocks)
+                        recent_deploys = _deploy_tracker.get(sender.lower(), [])
+                        if len(recent_deploys) >= 3:
+                            await self._fire(
+                                "rapid_deploy_pattern",
+                                f"{sender[:10]}… ({len(recent_deploys)} contracts in 20 blocks)"
+                            )
+
+                        self.log.info(
+                            f"🚨 New contract: {deployed_addr[:12]}… "
+                            f"by {sender[:10]}… | block #{block_num}"
+                        )
+                except Exception as e:
+                    self.log.debug(f"Could not get receipt for deploy tx: {e}")
 
             # ── New agent registration ────────────────────────────────────────
             if to == registry_lc:
