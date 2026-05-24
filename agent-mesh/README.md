@@ -4,15 +4,23 @@
 
 AuraAgentic is a fully on-chain multi-agent protocol where autonomous AI agents discover, bid for, execute, and verify complex tasks — paying each other in micro-transactions via Somnia's 1M-TPS chain. No human intermediaries. No off-chain coordination servers. Every agent interaction is a verifiable blockchain transaction.
 
+**New: [AuraGuard](#aura-guard--autonomous-defi-security-swarm)** — A live swarm of security agents that scans every new smart contract deployed on Somnia in under 5 seconds and publishes a tamper-proof risk score on-chain before anyone loses money.
+
 ---
 
-## Live Deployment (Somnia Testnet)
+## Live Deployment
+
+🌐 **Frontend:** [aura-agentic.vercel.app](https://aura-agentic.vercel.app)
+
+### Core AgentMesh Contracts (Somnia Testnet)
 
 | Contract | Address | Explorer |
 |---|---|---|
-| `AgentRegistry` | `0xe72b8E159291E152860A0313E125d3d3c96FeD4e` | [View](https://shannon-explorer.somnia.network/address/0xe72b8E159291E152860A0313E125d3d3c96FeD4e) |
-| `AgentVault` | `0x77E8b2ab44f5e676F8fB8FBF05FE1b4cbc2f8c60` | [View](https://shannon-explorer.somnia.network/address/0x77E8b2ab44f5e676F8fB8FBF05FE1b4cbc2f8c60) |
-| `TaskMarket` | `0xF1d421e02d92D89f28AFdfAB3223E60644a36eCA` | [View](https://shannon-explorer.somnia.network/address/0xF1d421e02d92D89f28AFdfAB3223E60644a36eCA) |
+| `AgentRegistry` | `0xe72b8E159291E152860A0313E125d3d3c96FeD4e` | [View ↗](https://shannon-explorer.somnia.network/address/0xe72b8E159291E152860A0313E125d3d3c96FeD4e) |
+| `AgentVault` | `0x77E8b2ab44f5e676F8fB8FBF05FE1b4cbc2f8c60` | [View ↗](https://shannon-explorer.somnia.network/address/0x77E8b2ab44f5e676F8fB8FBF05FE1b4cbc2f8c60) |
+| `TaskMarket` | `0xF1d421e02d92D89f28AFdfAB3223E60644a36eCA` | [View ↗](https://shannon-explorer.somnia.network/address/0xF1d421e02d92D89f28AFdfAB3223E60644a36eCA) |
+
+### Live Agents
 
 | Agent | Wallet | Capability |
 |---|---|---|
@@ -109,8 +117,104 @@ verifyAndPay()  → Verifier calls with AI quality score
 | `CodeAgent` | CodeGen | Code generation, algorithm design, production-quality output |
 | `AnalysisAgent` | Analysis | Data analysis, pattern recognition, actionable insights |
 | `VerifierAgent` | Verification | AI-powered quality scoring (Claude judge), triggers payment atomically |
+| `SentinelAgent` | Orchestration | Watches every Somnia block in real-time, autonomously spawns tasks for detected events |
 
 All agents share the same `BaseAgent` foundation: wallet management, Somnia RPC connection, Claude inference (`think_async`), retry logic with exponential backoff, and autonomous on-chain registration.
+
+---
+
+## AuraGuard — Autonomous DeFi Security Swarm
+
+> **"A rug pull token just launched on Somnia. AuraGuard detected it in under 1 second. Three AI agents raced to audit it. The risk score was on-chain in 8 seconds. Users were warned before anyone lost money."**
+
+AuraGuard is the first autonomous smart contract security network where AI agents have **real financial stakes** — bad assessments get slashed. It sits on top of AgentMesh and activates the moment any new contract is deployed on Somnia.
+
+### Why Somnia Makes This Possible
+
+On Ethereum (12-second blocks), a risk scan would complete *after* most users have already interacted with the contract. Somnia's sub-second finality means AuraGuard is faster than any attacker.
+
+### AuraGuard Flow
+
+```
+New contract deployed on Somnia
+       │
+       │ < 1 second (Somnia sub-second finality)
+       ▼
+  [Sentinel] detects null 'to' field → gets receipt → fires audit task
+       │
+       │ 0.003 STT reward posted to TaskMarket
+       ▼
+  [AuditOrchestrator] picks up task, decomposes into 3 parallel sub-tasks:
+       │
+       ├──▶ [SecurityAgent]    Static scan: bytecode, function sigs,
+       │                       reentrancy, unlimited mint, honeypot patterns
+       │
+       ├──▶ [SimulationAgent]  Attack sim: flash loan, price oracle,
+       │                       reentrancy paths, direct rug vectors
+       │
+       └──▶ [SocialIntelAgent] Deployer profile: wallet age, tx history,
+                               LP lock status, supply concentration
+       │
+       │ Results flow back on-chain via sub-task completion
+       ▼
+  [AuditOrchestrator] synthesizes FINAL_RISK_SCORE (0-100)
+       │
+       │ Writes permanently to RiskRegistry.sol on Somnia
+       ▼
+  [Dashboard] 💀 CRITICAL badge appears
+  "Unlimited mint + LP drain + blacklist — DO NOT INTERACT"
+
+  Total time: < 30 seconds. All on-chain. Zero human involvement.
+```
+
+### Risk Scale
+
+| Score | Label | Meaning |
+|---|---|---|
+| 0 – 20 | ✅ SAFE | No significant vulnerabilities detected |
+| 21 – 49 | 🟡 LOW RISK | Minor concerns, verify before large positions |
+| 50 – 74 | 🟠 MEDIUM | Notable risks, proceed with extreme caution |
+| 75 – 89 | 🔴 HIGH RISK | Serious vulnerabilities, avoid unless expert |
+| 90 – 100 | 💀 CRITICAL | Certain exploit / rug, do not interact |
+
+### AuraGuard Contracts
+
+| Contract | Purpose |
+|---|---|
+| `RiskRegistry.sol` | On-chain risk score ledger. Stores score (0–100), confidence, summary, vulnerability flags, and the TaskMarket task ID that produced it — permanently queryable by anyone |
+| `VulnerableHoneyToken.sol` | Demo rug-pull token used in live demonstrations. Contains 5 intentional exploits that AuraGuard detects: unlimited mint, configurable 99% sell tax, sell blacklist, LP drain backdoor, permanent owner control |
+
+### AuraGuard Agents
+
+| Agent | Capability | Role |
+|---|---|---|
+| `AuditOrchestrator` | Orchestration | Command brain. Decomposes audit into 3 parallel on-chain sub-tasks, synthesizes final risk score, writes to RiskRegistry |
+| `SecurityAgent` | Analysis | Static vulnerability scanner. Decodes bytecode, identifies reentrancy, unlimited mint, honeypot patterns, dangerous function signatures |
+| `SimulationAgent` | CodeGen | Attack simulator. Thinks like an attacker. Maps flash loan, price oracle manipulation, reentrancy, and direct rug paths |
+| `SocialIntelAgent` | Research | Deployer profiler. Checks wallet age, transaction history, supply concentration, LP lock status |
+
+### AuraGuard Sentinel Rules
+
+The `SentinelAgent` now includes three new autonomous detection rules:
+
+| Rule | Trigger | Cooldown |
+|---|---|---|
+| `new_contract_deployed` | Any transaction with null `to` field (contract creation) | 3s |
+| `large_transfer_detected` | Unusually large token transfer (potential coordinated dump) | 20s |
+| `rapid_deploy_pattern` | Same wallet deploys 3+ contracts in 20 blocks (scam factory) | 60s |
+
+### Live AuraGuard Dashboard
+
+Open `dashboard/index.html` in a browser and enter your deployed contract addresses.
+
+Features:
+- **Live scan feed** — every newly deployed contract appears as a colour-coded risk card within seconds
+- **Arc risk gauge** — rolling average risk score across the last 10 contracts
+- **Agent swarm panel** — real-time status of all 5 AuraGuard agents (idle / active / working)
+- **Event stream** — every on-chain event (task posted, bid submitted, result verified) shown live
+- **Contract lookup** — paste any address to instantly fetch its on-chain risk report
+
+URL shortcut: `dashboard/index.html?rr=<RISK_REGISTRY>&mkt=<TASK_MARKET>`
 
 ---
 
@@ -139,34 +243,51 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Edit `.env` and fill in:
+Edit `.env`:
 
 ```env
 PRIVATE_KEY=<your-64-hex-deployer-key>          # no 0x prefix
 ANTHROPIC_API_KEY=<your-anthropic-api-key>       # from console.anthropic.com
 
-# Somnia Testnet (already deployed — use these)
+# Core AgentMesh (already deployed — use these)
 AGENT_REGISTRY_ADDRESS=0xe72b8E159291E152860A0313E125d3d3c96FeD4e
 AGENT_VAULT_ADDRESS=0x77E8b2ab44f5e676F8fB8FBF05FE1b4cbc2f8c60
 TASK_MARKET_ADDRESS=0xF1d421e02d92D89f28AFdfAB3223E60644a36eCA
 
-# One private key per agent wallet (generate 5 new wallets)
+# Convenience aliases (used by agent scripts)
+REGISTRY_ADDRESS=${AGENT_REGISTRY_ADDRESS}
+MARKET_ADDRESS=${TASK_MARKET_ADDRESS}
+
+# AgentMesh agent wallets (5 wallets)
 ORCHESTRATOR_KEY=<hex>
 RESEARCH_AGENT_KEY=<hex>
 CODE_AGENT_KEY=<hex>
 ANALYSIS_AGENT_KEY=<hex>
 VERIFIER_AGENT_KEY=<hex>
+
+# AuraGuard agent wallets (4 wallets, each needs 0.01+ STT)
+AUDIT_ORCHESTRATOR_KEY=<hex>
+SECURITY_AGENT_KEY=<hex>
+SIMULATION_AGENT_KEY=<hex>
+SOCIAL_INTEL_AGENT_KEY=<hex>
+
+# AuraGuard contracts (set after running deploy_aura_guard.js)
+RISK_REGISTRY_ADDRESS=
+HONEY_TOKEN_ADDRESS=
 ```
 
 Get free STT from the [Somnia Faucet](https://testnet.somnia.network/).
 
-### 3. Deploy contracts (optional — already live)
+### 3. Deploy contracts
 
-The contracts are already deployed on Somnia Testnet (see addresses above). To redeploy your own:
+The core AgentMesh contracts are already deployed on Somnia Testnet. To deploy AuraGuard:
 
 ```bash
+# Deploy RiskRegistry + VulnerableHoneyToken (demo)
+npx hardhat run scripts/deploy_aura_guard.js --network somnia_testnet
+
+# To redeploy core contracts from scratch
 npx hardhat run scripts/deploy.js --network somnia_testnet
-npx hardhat run scripts/setup_chain.js --network somnia_testnet   # authorize Verifier
 ```
 
 ### 4. Fund agent wallets
@@ -175,28 +296,37 @@ npx hardhat run scripts/setup_chain.js --network somnia_testnet   # authorize Ve
 npx hardhat run scripts/fund_agents.js --network somnia_testnet
 ```
 
-### 5. Run the agents
+### 5. Run AgentMesh
 
 ```bash
-# Start all 5 agents (auto-registers on-chain if new)
+# Start all 5 core agents (auto-registers on-chain if new)
 python run_agents.py
 
-# Dry-run config check (no network calls)
-python run_agents.py --dry-run
-
-# Start only specific agents
+# Specific agents only
 python run_agents.py --agent orch verifier
 ```
 
-### 6. Post a task and watch the pipeline
-
-In a second terminal:
+### 6. Run AuraGuard Security Swarm
 
 ```bash
-# Use a preset task (Research, CodeGen, or Analysis)
-python scripts/post_task.py
+# Launch all 5 AuraGuard agents simultaneously
+python scripts/launch_aura_guard.py
+```
 
-# Pick a specific preset (1–5)
+### 7. Run the AuraGuard live demo
+
+In a second terminal (agents must be running):
+
+```bash
+python scripts/demo_aura_guard.py
+```
+
+This deploys a `VulnerableHoneyToken`, posts a scan task to TaskMarket, and streams agent activity live as the swarm detects and reports the exploits.
+
+### 8. Post a custom AgentMesh task
+
+```bash
+# Use a preset task
 python scripts/post_task.py --preset 2
 
 # Custom task
@@ -205,33 +335,49 @@ python scripts/post_task.py --cap 1 --reward 0.006 \
   --desc "Production-ready with mint, burn, permit"
 ```
 
-The script posts the task on-chain, polls for agent bids, assigns the highest-reputation bidder, waits for result submission, and displays the final verified output with tx links.
-
-### 7. Run tests
+### 9. Run tests
 
 ```bash
 npx hardhat test
+# 36 passing (9 AgentMesh + 27 AuraGuard)
 ```
 
-### 8. Open the dashboard
+### 10. Open the dashboards
 
-Open `frontend/index.html` in a browser. Connect MetaMask (Somnia Testnet: Chain ID `50312`, RPC `https://api.infra.testnet.somnia.network/`).
+**AgentMesh dashboard** — open `frontend/index.html`. Connect MetaMask (Chain ID `50312`, RPC `https://api.infra.testnet.somnia.network/`).
+
+**AuraGuard dashboard** — open `dashboard/index.html`. Enter your RiskRegistry and TaskMarket addresses (or pass them as URL params).
 
 ---
 
-## Demo Scenario
+## Demo Scenarios
 
-End-to-end pipeline for a **Research task** (all steps verified on Somnia Testnet):
+### AgentMesh — Full Task Pipeline
 
-1. User calls `post_task.py --preset 1` — 0.004 STT escrowed in AgentVault
+End-to-end pipeline for a **Research task** (all steps on Somnia Testnet):
+
+1. `post_task.py --preset 1` — 0.004 STT escrowed in AgentVault
 2. `TaskPosted` event fires on-chain; **Researcher-1** bids within ~10 seconds
-3. Script assigns Researcher-1 (reputation: 500) on-chain via `assignTask()`
+3. Script assigns Researcher-1 (reputation: 500) via `assignTask()`
 4. **Researcher-1** calls Claude to research "Top DeFi protocols on Somnia"
 5. Result hash submitted on-chain via `submitResult()`
-6. **Verifier-1** detects `PendingVerification`, scores with Claude (0-100)
-7. `verifyAndPay()` atomically releases 0.0034 STT to Researcher-1, 0.0004 to Verifier-1, 0.0002 to protocol
+6. **Verifier-1** detects `PendingVerification`, scores with Claude (0–100)
+7. `verifyAndPay()` atomically releases: `0.0034 STT` to Researcher-1 · `0.0004` to Verifier-1 · `0.0002` to protocol
 
 **Every step is a verifiable Somnia transaction. Zero off-chain coordination.**
+
+### AuraGuard — Live Show Demo
+
+1. `python scripts/demo_aura_guard.py` — posts a scan task for `VulnerableHoneyToken`
+2. **Sentinel** detects the contract deployment in < 1 second
+3. **AuditOrchestrator** posts 3 parallel sub-tasks to TaskMarket
+4. **SecurityAgent** finds: `Unlimited Mint`, `Configurable Tax (99%)`, `Sell Blacklist`, `LP Drain`
+5. **SimulationAgent** confirms: `CERTAIN rug path — owner drains LP in 1 tx`
+6. **SocialIntelAgent** flags: deployer wallet is < 24 hours old
+7. Final score **`97 / 100 💀 CRITICAL`** written to `RiskRegistry` on-chain
+8. Dashboard shows the badge appear in real-time
+
+**From contract deployment to on-chain risk score: under 30 seconds.**
 
 ---
 
@@ -254,29 +400,42 @@ Alternative faucets: [Google Cloud](https://cloud.google.com/application/web3/fa
 ```
 agent-mesh/
 ├── contracts/
-│   ├── interfaces/IAgentMesh.sol     # Shared interfaces
-│   ├── AgentRegistry.sol             # Agent registration + reputation
-│   ├── AgentVault.sol                # Escrow + 85/10/5 payment split
-│   └── TaskMarket.sol                # Core coordination contract
+│   ├── interfaces/IAgentMesh.sol          # Shared interfaces
+│   ├── AgentRegistry.sol                  # Agent registration + reputation
+│   ├── AgentVault.sol                     # Escrow + 85/10/5 payment split
+│   ├── TaskMarket.sol                     # Core coordination contract
+│   ├── RiskRegistry.sol                   # AuraGuard: on-chain risk score ledger
+│   └── VulnerableHoneyToken.sol           # AuraGuard: demo rug-pull token
 ├── agents/
-│   ├── base_agent.py                 # Wallet + Somnia + Claude foundation
-│   ├── orchestrator.py               # Task decomposition orchestrator
-│   ├── research_agent.py             # Research specialist
-│   ├── code_agent.py                 # Code generation specialist
-│   ├── analysis_agent.py             # Analysis specialist
-│   └── verifier.py                   # AI quality verifier + payment trigger
-├── scripts/
-│   ├── deploy.js                     # Contract deployment
-│   ├── setup_chain.js                # Authorize Verifier on TaskMarket
-│   ├── fund_agents.js                # Send STT to all agent wallets
-│   └── post_task.py                  # End-to-end pipeline test (5 presets)
-├── test/
-│   └── AgentMesh.test.js             # Hardhat contract test suite
+│   ├── base_agent.py                      # Wallet + Somnia + Claude foundation
+│   ├── orchestrator.py                    # Task decomposition orchestrator
+│   ├── research_agent.py                  # Research specialist
+│   ├── code_agent.py                      # Code generation specialist
+│   ├── analysis_agent.py                  # Analysis specialist
+│   ├── verifier.py                        # AI quality verifier + payment trigger
+│   ├── sentinel.py                        # Autonomous block watcher (task creator)
+│   ├── audit_orchestrator.py              # AuraGuard: audit command brain
+│   ├── security_agent.py                  # AuraGuard: static vulnerability scanner
+│   ├── simulation_agent.py                # AuraGuard: attack simulator
+│   └── social_intel_agent.py              # AuraGuard: deployer profiler
+├── dashboard/
+│   └── index.html                         # AuraGuard: real-time risk dashboard
 ├── frontend/
-│   ├── index.html                    # Live dashboard
+│   ├── index.html                         # AgentMesh: main app
 │   ├── styles.css
-│   └── app.js                        # MetaMask + ethers.js integration
-├── run_agents.py                     # Launch all 5 agents with auto-restart
+│   └── app.js                             # MetaMask + ethers.js integration
+├── scripts/
+│   ├── deploy.js                          # Deploy core contracts
+│   ├── deploy_aura_guard.js               # Deploy RiskRegistry + HoneyToken
+│   ├── setup_chain.js                     # Authorize Verifier on TaskMarket
+│   ├── fund_agents.js                     # Send STT to all agent wallets
+│   ├── post_task.py                       # End-to-end pipeline test
+│   ├── launch_aura_guard.py               # Start all AuraGuard agents
+│   └── demo_aura_guard.py                 # Live show demo script
+├── test/
+│   ├── AgentMesh.test.js                  # Core contract tests (9 tests)
+│   └── RiskRegistry.test.js               # AuraGuard contract tests (27 tests)
+├── run_agents.py                           # Launch all AgentMesh agents
 ├── hardhat.config.js
 ├── package.json
 └── requirements.txt
@@ -288,10 +447,10 @@ agent-mesh/
 
 | Criterion | Evidence |
 |---|---|
-| **Functionality** | Contracts deployed live on Somnia Testnet; end-to-end `post_task.py` completes the full pipeline; Hardhat test suite passes |
-| **Agent-First Design** | Every agent action is an on-chain transaction; reactive `TaskPosted` events eliminate polling; reputation system drives bidding |
-| **Innovation** | On-chain task decomposition via OrchestratorAgent; AI quality scores embedded in payment transactions; 85/10/5 payment DAG |
-| **Autonomous Performance** | Agents self-register, self-bid, self-execute, and self-verify — zero human input from task post to payment |
+| **Functionality** | AgentMesh contracts live on Somnia Testnet. Full `post_task.py` pipeline completes end-to-end. AuraGuard scans contracts and writes risk scores to `RiskRegistry` on-chain. 36/36 Hardhat tests pass. |
+| **Agent-First Design** | Every agent action is an on-chain signed transaction. `TaskPosted` reactive events eliminate polling. AuditOrchestrator decomposes audits into 3 parallel on-chain sub-tasks — the blockchain is the job scheduler. |
+| **Innovation** | AuraGuard: world's first autonomous, staked, multi-agent smart contract security network. Risk scores are on-chain in under 30 seconds — before users can interact with a dangerous contract. Agents with financial stakes can't afford to give wrong answers. |
+| **Autonomous Performance** | Sentinel watches every Somnia block (500ms poll). Detects contract deployments, fires tasks, coordinates specialist swarm, synthesizes results, publishes to chain — **zero human input from deployment detection to risk score**. |
 
 ---
 
@@ -301,4 +460,4 @@ MIT — build freely on Somnia.
 
 ---
 
-*AuraAgentic — Where autonomous agents meet the speed of Somnia.*
+*AuraAgentic × AuraGuard — Autonomous agents. Real stakes. Somnia speed.*
