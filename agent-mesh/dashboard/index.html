@@ -4,6 +4,37 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AuraGuard — Real-Time Contract Risk Intelligence</title>
+  <link rel="icon"          type="image/svg+xml" href="../frontend/icon.svg" />
+  <link rel="shortcut icon" type="image/svg+xml" href="../frontend/icon.svg" />
+  <meta property="og:title"       content="AuraGuard — Autonomous DeFi Security" />
+  <meta property="og:description" content="Real-time smart contract risk scanner powered by AuraAgentic × Somnia." />
+  <meta property="og:image"       content="../frontend/icon.svg" />
+  <meta name="twitter:card"       content="summary_large_image" />
+  <!-- Splash: critical inline styles -->
+  <style>
+    #ag-splash{position:fixed;inset:0;z-index:9999;background:#070910;display:flex;align-items:center;justify-content:center;flex-direction:column;transition:opacity .6s ease}
+    #ag-splash.out{opacity:0;pointer-events:none}
+    .ags-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(0,212,255,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,255,.04) 1px,transparent 1px);background-size:48px 48px;animation:ags-drift 10s linear infinite}
+    @keyframes ags-drift{to{background-position:48px 48px}}
+    .ags-glow{position:absolute;width:600px;height:600px;background:radial-gradient(circle,rgba(220,38,38,.09) 0%,rgba(108,99,255,.1) 45%,transparent 70%);border-radius:50%;animation:ags-pulse 3s ease-in-out infinite alternate}
+    @keyframes ags-pulse{from{opacity:.5;transform:scale(.9)}to{opacity:1;transform:scale(1.1)}}
+    .ags-inner{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:18px}
+    .ags-icon{font-size:80px;animation:ags-float 3s ease-in-out infinite alternate;filter:drop-shadow(0 0 24px rgba(0,212,255,.5))}
+    @keyframes ags-float{from{transform:translateY(0)}to{transform:translateY(-10px)}}
+    .ags-ring{width:130px;height:130px;border-radius:50%;border:1.5px solid rgba(0,212,255,.2);position:absolute;animation:ags-spin 5s linear infinite;top:50%;left:50%;transform:translate(-50%,-50%)}
+    .ags-ring::before{content:'';position:absolute;top:-5px;left:50%;transform:translateX(-50%);width:10px;height:10px;background:#00d4ff;border-radius:50%;box-shadow:0 0 16px #00d4ff,0 0 32px #00d4ff}
+    @keyframes ags-spin{to{transform:translate(-50%,-50%) rotate(360deg)}}
+    .ags-icon-wrap{position:relative;width:90px;height:90px;display:flex;align-items:center;justify-content:center}
+    .ags-brand{font-size:40px;font-weight:700;letter-spacing:5px;text-transform:uppercase;color:#00d4ff;text-shadow:0 0 30px rgba(0,212,255,.5);animation:ags-reveal 1s ease forwards}
+    @keyframes ags-reveal{from{opacity:0;letter-spacing:18px}to{opacity:1;letter-spacing:5px}}
+    .ags-sub{font-size:10px;color:rgba(100,116,139,.7);letter-spacing:3px;text-transform:uppercase;font-family:'SF Mono','Fira Code',monospace;animation:ags-fadeup .9s ease .5s forwards;opacity:0}
+    @keyframes ags-fadeup{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+    .ags-bar{width:200px;height:2px;background:rgba(30,36,51,.8);border-radius:2px;overflow:hidden;animation:ags-fadeup .8s ease .9s forwards;opacity:0;margin-top:4px}
+    .ags-bar-fill{height:100%;background:linear-gradient(90deg,#00d4ff,#6c63ff,#9333ea);border-radius:2px;animation:ags-load 2s ease 1s forwards;width:0}
+    @keyframes ags-load{0%{width:0}60%{width:75%}85%{width:90%}100%{width:100%}}
+    .ags-status{font-size:9px;color:rgba(100,116,139,.5);letter-spacing:2px;font-family:'SF Mono','Fira Code',monospace;animation:ags-fadeup .8s ease 1.2s forwards;opacity:0}
+    .ags-powered{position:absolute;bottom:28px;font-size:9px;color:rgba(100,116,139,.35);font-family:'SF Mono','Fira Code',monospace;letter-spacing:2px;animation:ags-fadeup 1s ease 1.5s forwards;opacity:0}
+  </style>
   <script src="https://cdn.jsdelivr.net/npm/ethers@6.9.0/dist/ethers.umd.min.js"></script>
   <style>
     /* ── Reset & Base ──────────────────────────────────────────────────────── */
@@ -661,6 +692,27 @@
   </style>
 </head>
 <body>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     AURA GUARD SPLASH SCREEN
+     ══════════════════════════════════════════════════════════════════ -->
+<div id="ag-splash">
+  <div class="ags-grid"></div>
+  <div class="ags-glow"></div>
+
+  <div class="ags-inner">
+    <div class="ags-icon-wrap">
+      <div class="ags-ring"></div>
+      <span class="ags-icon">🛡️</span>
+    </div>
+    <div class="ags-brand">AuraGuard</div>
+    <div class="ags-sub">Autonomous DeFi Security · AuraAgentic × Somnia</div>
+    <div class="ags-bar"><div class="ags-bar-fill"></div></div>
+    <div class="ags-status">Initialising agent swarm…</div>
+  </div>
+
+  <div class="ags-powered">SOMNIA AGENTIC L1 · &lt;1s FINALITY · 1M+ TPS</div>
+</div>
 
 <!-- ── Config Overlay ────────────────────────────────────────────────────── -->
 <div id="config-overlay">
@@ -1483,6 +1535,18 @@ const App = {
     if (this.activeRightTab === 'leaderboard') this.renderLeaderboard();
   },
 };
+
+// ── Splash dismiss ────────────────────────────────────────────────────────────
+(function() {
+  const SPLASH_MS = 2600;
+  function dismissSplash() {
+    const el = document.getElementById('ag-splash');
+    if (!el) return;
+    el.classList.add('out');
+    setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 700);
+  }
+  setTimeout(dismissSplash, SPLASH_MS);
+})();
 
 // ── Pre-fill from URL params ──────────────────────────────────────────────────
 const params = new URLSearchParams(location.search);

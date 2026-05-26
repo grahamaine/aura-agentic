@@ -1,28 +1,56 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="96" fill="#0d1017"/>
   <defs>
-    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#00d4ff"/>
-      <stop offset="50%" stop-color="#6c63ff"/>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#00d4ff"/>
+      <stop offset="55%"  stop-color="#6c63ff"/>
       <stop offset="100%" stop-color="#9333ea"/>
     </linearGradient>
-    <filter id="glow">
-      <feGaussianBlur stdDeviation="6" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    <linearGradient id="grad2" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#00d4ff" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#9333ea" stop-opacity="0.4"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="10" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="softglow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="20" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
   </defs>
-  <!-- Outer hexagon ring -->
-  <polygon points="256,72 366,133 366,255 256,316 146,255 146,133" fill="none" stroke="url(#g)" stroke-width="6" opacity="0.35"/>
-  <!-- Central hub -->
-  <circle cx="256" cy="194" r="44" fill="url(#g)" filter="url(#glow)" opacity="0.9"/>
-  <!-- Satellite nodes -->
-  <circle cx="140" cy="328" r="30" fill="url(#g)" opacity="0.7"/>
-  <circle cx="256" cy="374" r="30" fill="url(#g)" opacity="0.7"/>
-  <circle cx="372" cy="328" r="30" fill="url(#g)" opacity="0.7"/>
-  <!-- Connections -->
-  <line x1="256" y1="238" x2="140" y2="328" stroke="url(#g)" stroke-width="3" opacity="0.5"/>
-  <line x1="256" y1="238" x2="256" y2="344" stroke="url(#g)" stroke-width="3" opacity="0.5"/>
-  <line x1="256" y1="238" x2="372" y2="328" stroke="url(#g)" stroke-width="3" opacity="0.5"/>
-  <!-- Inner dot in hub -->
-  <circle cx="256" cy="194" r="14" fill="#0d1017" opacity="0.6"/>
+
+  <!-- Background with rounded corners -->
+  <rect width="512" height="512" rx="96" fill="#080a0f"/>
+
+  <!-- Subtle radial glow behind the A -->
+  <circle cx="256" cy="256" r="200" fill="url(#grad2)" opacity="0.15"/>
+
+  <!-- ── The "A" ── -->
+  <path d="M108 400 L256 96 L404 400"
+        stroke="url(#grad)" stroke-width="40"
+        stroke-linecap="round" stroke-linejoin="round"
+        fill="none" filter="url(#glow)"/>
+  <line x1="172" y1="285" x2="340" y2="285"
+        stroke="url(#grad)" stroke-width="32"
+        stroke-linecap="round" filter="url(#glow)"/>
+
+  <!-- ── Orbital ring (partial arc top-right of apex) ── -->
+  <path d="M 292 80 A 110 70 -30 0 1 420 185"
+        stroke="#00d4ff" stroke-width="10"
+        fill="none" opacity="0.6"
+        stroke-linecap="round"
+        filter="url(#glow)"/>
+
+  <!-- ── Orbital node dot — glowing blue sphere ── -->
+  <circle cx="415" cy="175" r="36"
+          fill="#00d4ff" opacity="0.95"
+          filter="url(#softglow)"/>
+  <circle cx="415" cy="175" r="20"
+          fill="#ffffff" opacity="0.55"/>
+
+  <!-- ── Two small satellite dots on the A strokes ── -->
+  <circle cx="150" cy="350" r="18"
+          fill="#9333ea" opacity="0.8" filter="url(#glow)"/>
+  <circle cx="362" cy="350" r="14"
+          fill="#6c63ff" opacity="0.7" filter="url(#glow)"/>
 </svg>
