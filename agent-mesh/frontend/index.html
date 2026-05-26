@@ -379,31 +379,59 @@
 
   // ── Scroll navigation ───────────────────────────────────────────────────────
   (function () {
-    const content = document.getElementById('content');
     const topBtn  = document.getElementById('scroll-top-btn');
     const downBtn = document.getElementById('scroll-down-btn');
-    if (!content || !topBtn || !downBtn) return;
+    if (!topBtn || !downBtn) return;
 
-    function updateBtns() {
-      const hasOverflow = content.scrollHeight > content.clientHeight + 30;
-      const atTop       = content.scrollTop < 80;
-      const nearBottom  = content.scrollTop + content.clientHeight >= content.scrollHeight - 80;
-      topBtn .classList.toggle('visible', !atTop);
-      downBtn.classList.toggle('visible', hasOverflow && !nearBottom);
+    // Determine the real scroll container at call-time.
+    // #content has overflow-y:auto; fall back to window if it isn't scrollable.
+    function getCtx() {
+      const c = document.getElementById('content');
+      if (c && c.scrollHeight > c.clientHeight + 5) {
+        return { top: c.scrollTop, vis: c.clientHeight, total: c.scrollHeight, el: c };
+      }
+      return {
+        top:   window.scrollY || document.documentElement.scrollTop,
+        vis:   window.innerHeight,
+        total: document.documentElement.scrollHeight,
+        el:    null,
+      };
     }
 
-    // Re-check on scroll
-    content.addEventListener('scroll', updateBtns, { passive: true });
+    function updateBtns() {
+      const { top, vis, total } = getCtx();
+      const nearBottom = (top + vis) >= (total - 100);
+      // scroll-down: always show unless we're near the bottom
+      downBtn.classList.toggle('visible', !nearBottom);
+      // back-to-top: show once user has scrolled more than 80px
+      topBtn.classList.toggle('visible', top > 80);
+    }
 
-    // Re-check whenever a view is injected (app.js replaces innerHTML of #content)
-    new MutationObserver(updateBtns).observe(content, { childList: true });
+    // Listen on both the panel and the window (covers all layout variants)
+    const content = document.getElementById('content');
+    if (content) {
+      content.addEventListener('scroll', updateBtns, { passive: true });
+      // Re-evaluate whenever app.js swaps in a new view
+      new MutationObserver(() => setTimeout(updateBtns, 80)).observe(content, { childList: true });
+    }
+    window.addEventListener('scroll', updateBtns, { passive: true });
 
     // Click handlers
-    topBtn .addEventListener('click', () => content.scrollTo({ top: 0, behavior: 'smooth' }));
-    downBtn.addEventListener('click', () => content.scrollBy({ top: content.clientHeight - 60, behavior: 'smooth' }));
+    topBtn.addEventListener('click', () => {
+      const { el } = getCtx();
+      (el || document.documentElement).scrollTo({ top: 0, behavior: 'smooth' });
+      if (!el) window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+    downBtn.addEventListener('click', () => {
+      const { el, vis } = getCtx();
+      if (el) el.scrollBy({ top: vis - 60, behavior: 'smooth' });
+      else    window.scrollBy({ top: window.innerHeight - 60, behavior: 'smooth' });
+    });
 
-    // Initial state after first view renders (~600 ms)
-    setTimeout(updateBtns, 600);
+    // Poll at three points: right away, after first render, and after splash clears
+    setTimeout(updateBtns, 200);
+    setTimeout(updateBtns, 900);
+    setTimeout(updateBtns, 3200);
   })();
 </script>
 </body>
