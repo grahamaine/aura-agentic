@@ -165,6 +165,16 @@ function addEvent(type, icon, title, desc) {
 // ── Router ────────────────────────────────────────────────────────────────────
 function navigate(view) {
   state.view = view;
+
+  // ── Always close the mobile sidebar drawer on navigation ──────────────────
+  // Doing this inside navigate() guarantees it runs regardless of which
+  // code path triggered the navigation (click, programmatic, back/forward).
+  const _sidebar  = document.getElementById("sidebar");
+  const _backdrop = document.getElementById("sidebar-backdrop");
+  if (_sidebar)  _sidebar.classList.remove("open");
+  if (_backdrop) _backdrop.classList.remove("visible");
+  document.body.style.overflow = ""; // release any body scroll lock
+
   document.querySelectorAll(".nav-item").forEach(el => {
     el.classList.toggle("active", el.dataset.view === view);
   });
@@ -1608,8 +1618,45 @@ function updateBadges() {
 // ── Wallet ─────────────────────────────────────────────────────────────────────
 const WC_PROJECT_ID = "5b3287538b8b8f55ba08cdd88b84e54c";
 
+// ── Reown AppKit — connect / disconnect handlers ──────────────────────────────
+// These are called by the module script in index.html once AppKit fires events.
+window._reownOnConnect = async function(address) {
+  state.wallet = address;
+  try {
+    const rpcProvider = new ethers.JsonRpcProvider(SOMNIA_RPC);
+    const bal = await rpcProvider.getBalance(address);
+    state.balance = parseFloat(ethers.formatEther(bal)).toFixed(4);
+  } catch { state.balance = "0"; }
+  setWalletConnected(address);
+  const dot = document.getElementById("net-dot");
+  if (dot) dot.classList.add("connected");
+  const lbl = document.getElementById("net-label");
+  if (lbl) lbl.textContent = "Somnia Testnet";
+  toast("success","Wallet Connected",`${address.slice(0,10)}… · ${state.balance} STT`);
+  addEvent("success","🔗","Wallet connected",`${address.slice(0,10)}… via Reown`);
+  loadChainData();
+};
+
+window._reownOnDisconnect = function() {
+  if (!state.wallet) return;
+  state.wallet = null; state.balance = "0";
+  setWalletDisconnected();
+  const dot = document.getElementById("net-dot");
+  if (dot) dot.classList.remove("connected");
+  const lbl = document.getElementById("net-label");
+  if (lbl) lbl.textContent = "Demo Mode";
+  toast("info","Wallet Disconnected","Disconnected from Somnia Testnet");
+  addEvent("info","🔌","Wallet disconnected","");
+};
+
 // ── Wallet modal ──────────────────────────────────────────────────────────────
 function showWalletModal() {
+  // Prefer Reown AppKit (richer UI, supports 400+ wallets)
+  if (window.appkitModal) {
+    window.appkitModal.open();
+    return;
+  }
+  // AppKit still loading — show fallback modal
   const overlay = document.getElementById("wallet-modal-overlay");
   if (overlay) overlay.classList.remove("hidden");
 }
@@ -1655,6 +1702,10 @@ function setWalletDisconnected() {
 }
 
 function disconnectWallet() {
+  // Disconnect Reown AppKit session if active
+  if (window.appkitModal) {
+    try { window.appkitModal.disconnect(); } catch(_) {}
+  }
   state.wallet = null;
   state.balance = "0";
   setWalletDisconnected();
@@ -2752,12 +2803,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   // Tap backdrop → close
   document.getElementById("sidebar-backdrop").addEventListener("click", closeSidebar);
-  // Tap any nav item on mobile → auto-close drawer
-  document.querySelectorAll(".nav-item").forEach(btn => {
-    btn.addEventListener("click", () => {
-      if (window.innerWidth <= 860) closeSidebar();
-    });
-  });
+  // Note: sidebar close is now baked into navigate() — no extra listener needed.
 
   // Demo toggle
   document.getElementById("demo-toggle").addEventListener("click", () => {
