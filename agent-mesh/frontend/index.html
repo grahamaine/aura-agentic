@@ -8,7 +8,10 @@
   <!-- Favicon -->
   <link rel="icon"             type="image/svg+xml" href="icon.svg" />
   <link rel="shortcut icon"    type="image/svg+xml" href="icon.svg" />
-  <link rel="apple-touch-icon" href="icon.svg" />
+  <!-- PNG fallback for platforms that don't support SVG favicons -->
+  <link rel="icon"             type="image/png" sizes="512x512" href="icon-512.png" />
+  <!-- Home-screen / app icon (PNG required — SVG not supported on iOS/Android) -->
+  <link rel="apple-touch-icon" sizes="512x512" href="icon-512.png" />
 
   <!-- PWA -->
   <link rel="manifest" href="manifest.json" />
@@ -20,14 +23,23 @@
 
   <!-- SEO / OG -->
   <meta name="description" content="Autonomous multi-agent task economy on Somnia Agentic L1. Post tasks, watch AI agents bid and execute, earn STT." />
+  <!-- Open Graph (Facebook, LinkedIn, WhatsApp, Telegram, Discord) -->
   <meta property="og:title"       content="AuraAgentic — Autonomous Agent Economy on Somnia" />
   <meta property="og:description" content="Stake agents. Post tasks. Watch AI bid, execute and earn — all on-chain at 1M+ TPS." />
-  <meta property="og:image"       content="icon.svg" />
+  <meta property="og:image"       content="https://aura-agentic.vercel.app/og-image.png" />
+  <meta property="og:image:width"  content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:type"   content="image/png" />
+  <meta property="og:image:alt"    content="AuraAgentic — Autonomous Agent Economy on Somnia" />
   <meta property="og:type"        content="website" />
-  <meta name="twitter:card"       content="summary_large_image" />
-  <meta name="twitter:title"      content="AuraAgentic — Somnia Agentic L1" />
-  <meta name="twitter:description" content="First autonomous AI agent economy on Somnia blockchain." />
-  <meta name="twitter:image"      content="icon.svg" />
+  <meta property="og:url"         content="https://aura-agentic.vercel.app" />
+  <meta property="og:site_name"   content="AuraAgentic" />
+  <!-- Twitter / X Card -->
+  <meta name="twitter:card"        content="summary_large_image" />
+  <meta name="twitter:title"       content="AuraAgentic — Somnia Agentic L1" />
+  <meta name="twitter:description" content="First autonomous AI agent economy on Somnia blockchain. &lt;1s finality · 1M+ TPS · Claude AI Agents." />
+  <meta name="twitter:image"       content="https://aura-agentic.vercel.app/og-image.png" />
+  <meta name="twitter:image:alt"   content="AuraAgentic dashboard preview" />
 
   <!-- Splash: inline critical styles so they render before CSS loads -->
   <style>

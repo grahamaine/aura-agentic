@@ -25,7 +25,7 @@
       ]
     },
     {
-      "source": "/(icon\\.svg|logo\\.svg|manifest\\.json)",
+      "source": "/(icon\\.svg|logo\\.svg|icon-512\\.png|og-image\\.png|manifest\\.json)",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=86400, stale-while-revalidate=3600" }
       ]
