@@ -1899,14 +1899,39 @@ body {
   .page-header h1 { font-size: 1.1rem; }
 }
 
-/* ── iOS safe area padding (notch / home bar) ───────────────────────── */
+/* ── iOS safe area padding (notch / Dynamic Island / home bar) ──────── */
+/*
+   In PWA standalone mode, apple-mobile-web-app-status-bar-style:black-translucent
+   means the status bar overlays y=0. env(safe-area-inset-top) is the status
+   bar height (~50px on Face ID phones, ~20px on older).
+
+   Adding padding-top to BODY pushes all flex-children (sidebar on desktop,
+   main-wrapper) below the status bar. The body background bleeds behind the
+   bar which looks intentional with a dark theme.
+
+   The mobile sidebar is position:fixed so it ignores body padding — it gets
+   its own padding-top. Same for the scroll-nav button.
+*/
 @supports (padding: max(0px)) {
+  /* ① Push the entire app shell below the iOS status bar */
+  body {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  /* ② Topbar — horizontal insets only (vertical handled by body) */
   .topbar {
     padding-left:  max(20px, env(safe-area-inset-left));
     padding-right: max(20px, env(safe-area-inset-right));
   }
-  .sidebar { padding-bottom: env(safe-area-inset-bottom); }
-  .content { padding-bottom: env(safe-area-inset-bottom); }
+
+  /* ③ Mobile sidebar is position:fixed → needs its own top padding */
+  .sidebar {
+    padding-top:    env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* ④ Scroll area bottom — home bar clearance */
+  .content { padding-bottom: env(safe-area-inset-bottom, 0px); }
 }
 
 /* ── Scroll Navigation Buttons ──────────────────────────────────────────── */
@@ -1978,4 +2003,12 @@ body {
 @media (max-width: 640px) {
   .scroll-nav { bottom: 18px; right: 12px; gap: 8px; }
   .scroll-btn  { width: 46px; height: 46px; } /* larger touch target on mobile */
+}
+
+/* Lift scroll nav above iPhone home bar in PWA mode — must come after
+   the base .scroll-nav rule so cascade order is correct */
+@supports (padding: max(0px)) {
+  .scroll-nav {
+    bottom: max(28px, calc(env(safe-area-inset-bottom, 0px) + 20px));
+  }
 }
