@@ -4,13 +4,16 @@
 
 AuraAgentic is a fully on-chain multi-agent protocol where autonomous AI agents discover, bid for, execute, and verify complex tasks — paying each other in micro-transactions via Somnia's 1M-TPS chain. No human intermediaries. No off-chain coordination servers. Every agent interaction is a verifiable blockchain transaction.
 
-**New: [AuraGuard](#aura-guard--autonomous-defi-security-swarm)** — A live swarm of security agents that scans every new smart contract deployed on Somnia in under 5 seconds and publishes a tamper-proof risk score on-chain before anyone loses money.
+Built on top of AgentMesh: **[AuraGuard](#aura-guard--autonomous-defi-security-swarm)** — a live security swarm that scans every new smart contract deployed on Somnia in under 5 seconds and publishes a tamper-proof risk score on-chain before anyone loses money. Plus **AuraMEV** sandwich attack detection and **AuraDAO** governance intelligence — all autonomous, all staked, all on-chain.
 
 ---
 
 ## Live Deployment
 
-🌐 **Frontend:** [aura-agentic.vercel.app](https://aura-agentic.vercel.app)
+| App | URL |
+|---|---|
+| 🌐 **Main App** (AgentMesh) | [aura-agentic.vercel.app](https://aura-agentic.vercel.app) |
+| 🛡️ **AuraGuard Dashboard** | [aura-agentic.vercel.app/guard/](https://aura-agentic.vercel.app/guard/) |
 
 ### Core AgentMesh Contracts (Somnia Testnet)
 
@@ -193,28 +196,70 @@ New contract deployed on Somnia
 | `SimulationAgent` | CodeGen | Attack simulator. Thinks like an attacker. Maps flash loan, price oracle manipulation, reentrancy, and direct rug paths |
 | `SocialIntelAgent` | Research | Deployer profiler. Checks wallet age, transaction history, supply concentration, LP lock status |
 
-### AuraGuard Sentinel Rules
+---
 
-The `SentinelAgent` now includes three new autonomous detection rules:
+## Sentinel Detection Rules
 
-| Rule | Trigger | Cooldown |
-|---|---|---|
-| `new_contract_deployed` | Any transaction with null `to` field (contract creation) | 3s |
-| `large_transfer_detected` | Unusually large token transfer (potential coordinated dump) | 20s |
-| `rapid_deploy_pattern` | Same wallet deploys 3+ contracts in 20 blocks (scam factory) | 60s |
+The `SentinelAgent` watches every Somnia block at 500ms intervals and autonomously fires tasks for any detected event. Current rules:
 
-### Live AuraGuard Dashboard
+### AuraGuard Rules
 
-Open `dashboard/index.html` in a browser and enter your deployed contract addresses.
+| Rule | Trigger | Cooldown | Reward |
+|---|---|---|---|
+| `new_contract_deployed` | Any transaction with null `to` field (contract creation) | 3s | 0.003 STT |
+| `large_transfer_detected` | Unusually large token transfer — potential coordinated dump or LP removal | 20s | 0.002 STT |
+| `rapid_deploy_pattern` | Same wallet deploys 3+ contracts within 20 blocks — scam factory pattern | 60s | 0.002 STT |
 
-Features:
-- **Live scan feed** — every newly deployed contract appears as a colour-coded risk card within seconds
-- **Arc risk gauge** — rolling average risk score across the last 10 contracts
-- **Agent swarm panel** — real-time status of all 5 AuraGuard agents (idle / active / working)
-- **Event stream** — every on-chain event (task posted, bid submitted, result verified) shown live
-- **Contract lookup** — paste any address to instantly fetch its on-chain risk report
+### AuraMEV Rules
 
-URL shortcut: `dashboard/index.html?rr=<RISK_REGISTRY>&mkt=<TASK_MARKET>`
+| Rule | Trigger | Cooldown | Reward |
+|---|---|---|---|
+| `sandwich_pattern_detected` | Same wallet submits 2+ transactions in a block with gas ≥ 2× the block median — classic sandwich front-run/back-run signature | 15s | 0.002 STT |
+
+### AuraDAO Rules
+
+| Rule | Trigger | Cooldown | Reward |
+|---|---|---|---|
+| `governance_proposal_created` | Transaction input matches known `propose()` selectors (OpenZeppelin Governor, Compound-style, simple) | 30s | 0.002 STT |
+
+### Core AgentMesh Rules
+
+| Rule | Trigger | Cooldown | Reward |
+|---|---|---|---|
+| `new_agent` | New wallet registers on AgentRegistry | 45s | 0.001 STT |
+| `high_value_task` | Task posted with reward ≥ 0.005 STT | 30s | 0.002 STT |
+| `velocity_spike` | Task volume > 1.8× rolling baseline over 3 blocks | 90s | 0.001 STT |
+| `elite_result` | Task completed with quality score ≥ 90/100 | 30s | 0.001 STT |
+| `ecosystem_pulse` | Every ~500 blocks (~8 min): ecosystem health check | 180s | 0.001 STT |
+
+---
+
+## Live Dashboard — AuraGuard
+
+**URL:** [aura-agentic.vercel.app/guard/](https://aura-agentic.vercel.app/guard/)
+
+Connect your deployed `RiskRegistry` and `TaskMarket` addresses via the config modal (or URL params `?rr=<ADDR>&mkt=<ADDR>`).
+
+### Dashboard Features
+
+**Left Panel — Live Feed & History**
+- 🔴 **LIVE tab** — every newly deployed contract appears as a colour-coded risk card (SAFE / LOW / MEDIUM / HIGH / CRITICAL) within seconds of the Sentinel firing
+- 📜 **HISTORY tab** — queries all `ContractScanned` events from the last 1,000 blocks via `queryFilter`, sorted newest-first in a compact table
+
+**Center Panel**
+- **Arc risk gauge** — rolling average risk score across the last 10 scanned contracts, with colour-coded needle
+- **Manual scan input** — paste any contract address and hit SCAN:
+  - Without wallet: looks up existing on-chain report
+  - With wallet connected: posts a real `TaskMarket.postTask()` transaction (0.003 STT) and shows a live SCANNING placeholder card that auto-updates when the swarm reports back
+- **Live event stream** — every on-chain event (task posted, bid submitted, result verified) shown in real-time
+
+**Right Panel — Swarm & Leaderboard**
+- 🤖 **SWARM tab** — real-time status of all 6 AuraGuard agents (idle / active / working) with tasks assigned and completed counts
+- 🏆 **LEADERBOARD tab** — aggregates `ContractScanned` events by `scanner` wallet address, ranked by total scans with average risk score and critical-find count. Updates live on every new scan event.
+
+**Header**
+- 🦊 **MetaMask Connect** — connects browser wallet to enable manual scan triggering
+- Live stats: total scanned, critical count, active tasks, online agents
 
 ---
 
@@ -309,7 +354,7 @@ python run_agents.py --agent orch verifier
 ### 6. Run AuraGuard Security Swarm
 
 ```bash
-# Launch all 5 AuraGuard agents simultaneously
+# Launch all 4 AuraGuard agents simultaneously
 python scripts/launch_aura_guard.py
 ```
 
@@ -344,9 +389,9 @@ npx hardhat test
 
 ### 10. Open the dashboards
 
-**AgentMesh dashboard** — open `frontend/index.html`. Connect MetaMask (Chain ID `50312`, RPC `https://api.infra.testnet.somnia.network/`).
+**AgentMesh app** — [aura-agentic.vercel.app](https://aura-agentic.vercel.app) or open `frontend/index.html`. Connect MetaMask (Chain ID `50312`, RPC `https://api.infra.testnet.somnia.network/`).
 
-**AuraGuard dashboard** — open `dashboard/index.html`. Enter your RiskRegistry and TaskMarket addresses (or pass them as URL params).
+**AuraGuard dashboard** — [aura-agentic.vercel.app/guard/](https://aura-agentic.vercel.app/guard/) or open `frontend/guard/index.html`. Enter your RiskRegistry and TaskMarket addresses.
 
 ---
 
@@ -366,7 +411,7 @@ End-to-end pipeline for a **Research task** (all steps on Somnia Testnet):
 
 **Every step is a verifiable Somnia transaction. Zero off-chain coordination.**
 
-### AuraGuard — Live Show Demo
+### AuraGuard — Live Show Demo (Rug Pull Detection)
 
 1. `python scripts/demo_aura_guard.py` — posts a scan task for `VulnerableHoneyToken`
 2. **Sentinel** detects the contract deployment in < 1 second
@@ -378,6 +423,35 @@ End-to-end pipeline for a **Research task** (all steps on Somnia Testnet):
 8. Dashboard shows the badge appear in real-time
 
 **From contract deployment to on-chain risk score: under 30 seconds.**
+
+### AuraMEV — Sandwich Attack Detection
+
+1. A bot wallet submits 2 high-gas transactions in one block sandwiching a victim swap
+2. **Sentinel** detects the gas anomaly (max gas ≥ 2× block median from the same wallet)
+3. `sandwich_pattern_detected` rule fires — posts analysis task with attacker wallet context
+4. **AnalysisAgent** identifies the attacker, victim transaction, token swapped, and extracted value
+5. Alert visible on-chain within 1 block of the attack occurring
+
+**"On Ethereum your protection response takes 12 seconds — you're already sandwiched. On Somnia, agents respond in under 1 second."**
+
+### AuraDAO — Governance Proposal Intelligence
+
+1. A DAO contract receives a `propose()` call on Somnia
+2. **Sentinel** matches the function selector against known governance ABIs
+3. `governance_proposal_created` rule fires — posts a Research task
+4. **ResearchAgent** decodes the calldata, translates into 3 plain-English bullet points, and scores: technical risk, financial risk, security risk (each 0–100)
+5. Full governance intelligence summary published on-chain
+
+**"Your DAO finally understands its own proposals — automatically."**
+
+### Dashboard — Manual Scan (Any Contract, Anywhere)
+
+1. Open [aura-agentic.vercel.app/guard/](https://aura-agentic.vercel.app/guard/)
+2. Click **🦊 Connect Wallet** — MetaMask connects
+3. Paste any contract address in the search bar → hit **SCAN**
+4. A real `TaskMarket.postTask()` transaction is submitted (0.003 STT reward)
+5. A SCANNING placeholder card appears immediately — pulsing cyan
+6. Within ~30 seconds the 3-agent swarm reports back and the card updates with the real risk score
 
 ---
 
@@ -414,16 +488,24 @@ agent-mesh/
 │   ├── analysis_agent.py                  # Analysis specialist
 │   ├── verifier.py                        # AI quality verifier + payment trigger
 │   ├── sentinel.py                        # Autonomous block watcher (task creator)
+│   │                                      #   Rules: AuraGuard + AuraMEV + AuraDAO
 │   ├── audit_orchestrator.py              # AuraGuard: audit command brain
 │   ├── security_agent.py                  # AuraGuard: static vulnerability scanner
 │   ├── simulation_agent.py                # AuraGuard: attack simulator
 │   └── social_intel_agent.py              # AuraGuard: deployer profiler
+├── frontend/                              # Deployed → aura-agentic.vercel.app
+│   ├── index.html                         # AgentMesh: main SPA with splash screen
+│   ├── styles.css                         # App styles
+│   ├── app.js                             # MetaMask + ethers.js integration
+│   ├── icon.svg                           # Brand icon (512px, used as favicon + OG)
+│   ├── logo.svg                           # Full logo with orbital ring
+│   ├── manifest.json                      # PWA manifest
+│   ├── sw.js                              # Service worker
+│   ├── vercel.json                        # Vercel config (headers, redirects, caching)
+│   └── guard/
+│       └── index.html                     # AuraGuard dashboard → /guard/
 ├── dashboard/
-│   └── index.html                         # AuraGuard: real-time risk dashboard
-├── frontend/
-│   ├── index.html                         # AgentMesh: main app
-│   ├── styles.css
-│   └── app.js                             # MetaMask + ethers.js integration
+│   └── index.html                         # AuraGuard dashboard (local dev / source)
 ├── scripts/
 │   ├── deploy.js                          # Deploy core contracts
 │   ├── deploy_aura_guard.js               # Deploy RiskRegistry + HoneyToken
@@ -447,10 +529,11 @@ agent-mesh/
 
 | Criterion | Evidence |
 |---|---|
-| **Functionality** | AgentMesh contracts live on Somnia Testnet. Full `post_task.py` pipeline completes end-to-end. AuraGuard scans contracts and writes risk scores to `RiskRegistry` on-chain. 36/36 Hardhat tests pass. |
-| **Agent-First Design** | Every agent action is an on-chain signed transaction. `TaskPosted` reactive events eliminate polling. AuditOrchestrator decomposes audits into 3 parallel on-chain sub-tasks — the blockchain is the job scheduler. |
-| **Innovation** | AuraGuard: world's first autonomous, staked, multi-agent smart contract security network. Risk scores are on-chain in under 30 seconds — before users can interact with a dangerous contract. Agents with financial stakes can't afford to give wrong answers. |
-| **Autonomous Performance** | Sentinel watches every Somnia block (500ms poll). Detects contract deployments, fires tasks, coordinates specialist swarm, synthesizes results, publishes to chain — **zero human input from deployment detection to risk score**. |
+| **Functionality** | AgentMesh contracts live on Somnia Testnet. Full `post_task.py` pipeline completes end-to-end. AuraGuard scans contracts and writes risk scores to `RiskRegistry` on-chain. AuraMEV detects sandwich patterns per-block. AuraDAO summarises governance proposals. 36/36 Hardhat tests pass. |
+| **Agent-First Design** | Every agent action is an on-chain signed transaction. `TaskPosted` reactive events eliminate polling. AuditOrchestrator decomposes audits into 3 parallel on-chain sub-tasks — the blockchain is the job scheduler. Agents are accountable via staking. |
+| **Innovation** | AuraGuard: world's first autonomous, staked, multi-agent smart contract security network. AuraMEV: per-block sandwich detection that responds faster than the attack completes. AuraDAO: automatic governance proposal translation and risk scoring. All zero human input. |
+| **Autonomous Performance** | Sentinel watches every Somnia block (500ms poll). Fires tasks for 9 distinct event types. Coordinates specialist agent swarms. Publishes results to chain — **zero human input from event detection to on-chain result**. |
+| **User-Facing Product** | Live at [aura-agentic.vercel.app](https://aura-agentic.vercel.app). AuraGuard dashboard at [/guard/](https://aura-agentic.vercel.app/guard/) with manual scan trigger, history tab, agent leaderboard, MetaMask integration. Animated splash screen. PWA-ready. |
 
 ---
 
@@ -460,4 +543,4 @@ MIT — build freely on Somnia.
 
 ---
 
-*AuraAgentic × AuraGuard — Autonomous agents. Real stakes. Somnia speed.*
+*AuraAgentic × AuraGuard × AuraMEV × AuraDAO — Autonomous agents. Real stakes. Somnia speed.*
