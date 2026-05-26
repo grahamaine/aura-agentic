@@ -564,6 +564,100 @@
     }
 
     .detail-empty { color: var(--text-dim); font-size: 11px; text-align: center; margin-top: 40px; }
+
+    /* ── Panel tabs ────────────────────────────────────────────────────────── */
+    .tab-btn {
+      background: none;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      color: var(--text-dim);
+      font-family: inherit;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 2px 7px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .tab-btn:hover { color: var(--text); border-color: var(--border); }
+    .tab-btn.active { color: var(--cyan); border-color: var(--cyan); background: rgba(0,212,255,0.08); }
+
+    /* ── History list ──────────────────────────────────────────────────────── */
+    .history-row {
+      display: grid;
+      grid-template-columns: 1fr 42px 48px;
+      gap: 6px;
+      align-items: center;
+      padding: 6px 8px;
+      border-bottom: 1px solid rgba(30,36,51,0.5);
+      cursor: pointer;
+      transition: background 0.15s;
+      font-size: 10px;
+    }
+    .history-row:hover { background: var(--bg3); }
+    .h-addr { color: var(--cyan); }
+    .h-meta { font-size: 9px; color: var(--text-dim); margin-top: 1px; }
+    .hist-header {
+      display: grid;
+      grid-template-columns: 1fr 42px 48px;
+      gap: 6px;
+      padding: 5px 8px;
+      font-size: 8px;
+      color: var(--text-dim);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg2);
+      position: sticky; top: 0;
+    }
+
+    /* ── Leaderboard ───────────────────────────────────────────────────────── */
+    .lb-header {
+      display: grid;
+      grid-template-columns: 22px 1fr 38px 42px;
+      gap: 4px;
+      padding: 5px 8px;
+      font-size: 8px;
+      color: var(--text-dim);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg2);
+      position: sticky; top: 0;
+    }
+    .lb-row {
+      display: grid;
+      grid-template-columns: 22px 1fr 38px 42px;
+      gap: 4px;
+      align-items: center;
+      padding: 8px 8px;
+      border-bottom: 1px solid rgba(30,36,51,0.4);
+      font-size: 10px;
+      transition: background 0.15s;
+    }
+    .lb-row:hover { background: var(--bg3); }
+    .lb-rank   { font-size: 14px; text-align: center; }
+    .lb-scanner { color: var(--cyan); }
+    .lb-scans  { color: var(--green); font-weight: 700; text-align: right; }
+    .lb-avg    { font-weight: 700; text-align: right; }
+
+    /* ── Wallet button ─────────────────────────────────────────────────────── */
+    .wallet-btn {
+      padding: 5px 12px;
+      background: rgba(124,58,237,0.12);
+      border: 1px solid var(--purple);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: 0.5px;
+      transition: all 0.2s;
+    }
+    .wallet-btn:hover  { background: rgba(124,58,237,0.28); }
+    .wallet-btn.connected { border-color: var(--green); color: var(--green); background: rgba(34,197,94,0.1); }
   </style>
 </head>
 <body>
@@ -617,6 +711,7 @@
       <span class="value" id="stat-agents" style="color:var(--green)">0</span>
       <span class="label">Agents</span>
     </div>
+    <button class="wallet-btn" id="wallet-btn" onclick="App.connectWallet()">🦊 Connect Wallet</button>
     <div class="live-badge">
       <div class="live-dot"></div>
       LIVE
@@ -627,18 +722,31 @@
 <!-- ── Main Grid ──────────────────────────────────────────────────────────── -->
 <div class="main">
 
-  <!-- LEFT: Live Scan Feed -->
+  <!-- LEFT: Live Scan Feed + History -->
   <div class="panel" id="scan-feed">
-    <div class="panel-header">
-      <span><span class="icon">🔍</span>Live Scan Feed</span>
+    <div class="panel-header" style="gap:8px">
+      <span style="display:flex;gap:4px;align-items:center">
+        <button class="tab-btn active" id="left-tab-live"    onclick="App.switchLeftTab('live')">🔴 LIVE</button>
+        <button class="tab-btn"        id="left-tab-history" onclick="App.switchLeftTab('history')">📜 HISTORY</button>
+      </span>
       <span id="scan-count" style="color:var(--cyan)">0 scans</span>
     </div>
+    <!-- Live feed -->
     <div class="panel-body" id="scan-list">
       <div style="text-align:center;color:var(--text-dim);padding:40px 0;font-size:11px;">
         Waiting for new contract deployments...<br>
         <span style="font-size:9px;opacity:0.5;margin-top:8px;display:block">
           AuraGuard watches every Somnia block in real-time
         </span>
+      </div>
+    </div>
+    <!-- History feed (hidden by default) -->
+    <div class="panel-body" id="history-list" style="display:none;padding:0">
+      <div class="hist-header">
+        <span>Contract</span><span style="text-align:right">Score</span><span style="text-align:right">Conf%</span>
+      </div>
+      <div id="history-rows">
+        <div style="text-align:center;color:var(--text-dim);padding:30px;font-size:11px">Loading history…</div>
       </div>
     </div>
   </div>
@@ -693,14 +801,27 @@
     </div>
   </div>
 
-  <!-- RIGHT: Agent Status -->
+  <!-- RIGHT: Agent Swarm + Leaderboard -->
   <div class="panel" id="agent-panel">
-    <div class="panel-header">
-      <span><span class="icon">🤖</span>Agent Swarm</span>
+    <div class="panel-header" style="gap:8px">
+      <span style="display:flex;gap:4px;align-items:center">
+        <button class="tab-btn active" id="right-tab-swarm"       onclick="App.switchRightTab('swarm')">🤖 SWARM</button>
+        <button class="tab-btn"        id="right-tab-leaderboard" onclick="App.switchRightTab('leaderboard')">🏆 BOARD</button>
+      </span>
       <span id="agent-online" style="color:var(--green)">0 online</span>
     </div>
+    <!-- Agent swarm cards -->
     <div class="panel-body" id="agent-list">
       <!-- Agents rendered by JS -->
+    </div>
+    <!-- Leaderboard (hidden by default) -->
+    <div class="panel-body" id="leaderboard-list" style="display:none;padding:0">
+      <div class="lb-header">
+        <span>#</span><span>Scanner</span><span style="text-align:right">Scans</span><span style="text-align:right">AvgRisk</span>
+      </div>
+      <div id="leaderboard-rows">
+        <div style="text-align:center;color:var(--text-dim);padding:30px;font-size:11px">Loading leaderboard…</div>
+      </div>
     </div>
   </div>
 
@@ -753,7 +874,16 @@ const MARKET_ABI = [
       { indexed: true, name: "taskId", type: "uint256" },
       { indexed: true, name: "agent", type: "address" },
       { indexed: false, name: "qualityScore", type: "uint256" }
-    ], name: "TaskCompleted", type: "event" }
+    ], name: "TaskCompleted", type: "event" },
+  { inputs: [
+      { name: "title",               type: "string"  },
+      { name: "description",         type: "string"  },
+      { name: "inputData",           type: "string"  },
+      { name: "requiredCapability",  type: "uint8"   },
+      { name: "deadline",            type: "uint256" },
+      { name: "priority",            type: "uint8"   }
+    ], name: "postTask", outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "payable", type: "function" }
 ];
 
 // ─── State ─────────────────────────────────────────────────────────────────────
@@ -767,6 +897,15 @@ const App = {
   eventCount: 0,
   pollInterval: null,
   lastBlock: 0,
+  // Wallet
+  walletSigner:  null,
+  walletAddress: null,
+  // Tabs
+  activeLeftTab:  'live',
+  activeRightTab: 'swarm',
+  // History + leaderboard data
+  historyScans: [],
+  leaderboard:  [],
 
   agentDefs: [
     { name: "AuditOrchestrator", icon: "🎯", cap: "Orchestration", status: "idle", tasks: 0, completed: 0, current: "Waiting..." },
@@ -801,6 +940,9 @@ const App = {
       this.startPolling();
       this.listenEvents();
       this.drawGauge(0);
+      // Kick off background loads (don't await — non-blocking)
+      this.loadHistory();
+      this.loadLeaderboard();
     } catch(e) {
       alert(`Connection failed: ${e.message}`);
     }
@@ -851,6 +993,7 @@ const App = {
       this.addScan({ addr: contractAddr, score, confidence: Number(confidence),
                      summary, scannedAt: Math.floor(Date.now()/1000), taskId: Number(taskId) });
       this.updateStats();
+      this.updateLeaderboardEntry(scanner, score);
 
       const label = this.scoreLabel(score);
       if (score >= 90) {
@@ -921,10 +1064,11 @@ const App = {
     if (this.scans.length === 0) return;
 
     list.innerHTML = this.scans.map(s => {
-      const level = this.scoreLevel(s.score);
-      const color = this.scoreColor(s.score);
-      const fillPct = s.score;
-      const timeStr = s.scannedAt ? new Date(s.scannedAt * 1000).toLocaleTimeString() : '--:--:--';
+      const scanning = s.status === 'scanning';
+      const level    = scanning ? 'SCANNING' : this.scoreLevel(s.score);
+      const color    = scanning ? 'var(--cyan)' : this.scoreColor(s.score);
+      const fillPct  = scanning ? 50 : s.score;
+      const timeStr  = scanning ? 'scanning…' : (s.scannedAt ? new Date(s.scannedAt * 1000).toLocaleTimeString() : '--:--:--');
 
       return `
         <div class="scan-card ${level}" onclick="App.showDetail('${s.addr}')">
@@ -1040,11 +1184,16 @@ const App = {
     const addr = document.getElementById('search-input').value.trim();
     if (!addr || !addr.startsWith('0x')) { this.toast('Enter a valid contract address (0x…)', 3000); return; }
 
-    // Add as "SCANNING" card
     const existing = this.scans.find(s => s.addr.toLowerCase() === addr.toLowerCase());
     if (!existing) {
-      this.addEvent('🔍', `Manual scan requested`, addr.slice(0,20) + '…', '#00d4ff');
-      this.toast(`🔍 Looking up ${addr.slice(0,14)}…`, 3000);
+      if (this.walletSigner) {
+        // Wallet connected — trigger a real on-chain scan task
+        await this.triggerManualScan(addr);
+        return;
+      } else {
+        this.addEvent('🔍', 'Manual lookup', addr.slice(0,20) + '…', '#00d4ff');
+        this.toast(`🔍 Looking up ${addr.slice(0,14)}… · Connect wallet to trigger scan`, 4000);
+      }
     }
     await this.showDetail(addr);
   },
@@ -1154,6 +1303,184 @@ const App = {
     el.textContent = msg;
     container.appendChild(el);
     setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity 0.3s'; setTimeout(() => el.remove(), 300); }, duration);
+  },
+
+  // ── Wallet ─────────────────────────────────────────────────────────────────
+
+  async connectWallet() {
+    if (!window.ethereum) { this.toast('MetaMask not detected — install it to trigger scans', 4000); return; }
+    try {
+      await window.ethereum.request({ method: 'eth_requestAccounts' });
+      const provider       = new ethers.BrowserProvider(window.ethereum);
+      const signer         = await provider.getSigner();
+      this.walletSigner    = signer;
+      this.walletAddress   = await signer.getAddress();
+      const btn = document.getElementById('wallet-btn');
+      btn.textContent = `${this.walletAddress.slice(0,6)}…${this.walletAddress.slice(-4)}`;
+      btn.classList.add('connected');
+      this.toast(`✅ Wallet connected — you can now trigger manual scans`, 3500);
+      this.addEvent('🦊', 'Wallet connected', this.walletAddress.slice(0,18) + '…', '#7c3aed');
+    } catch(e) {
+      this.toast(`Wallet error: ${e.message.slice(0,80)}`, 4000);
+    }
+  },
+
+  async triggerManualScan(addr) {
+    if (!this.walletSigner) { this.toast('Connect wallet first', 3000); return; }
+    try {
+      const market = new ethers.Contract(this.market.target, MARKET_ABI, this.walletSigner);
+      const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
+      const reward   = ethers.parseEther('0.003');
+
+      const tx = await market.postTask(
+        `[AURA GUARD] Manual scan: ${addr}`,
+        'AuraGuard manual audit request. Run full 3-agent scan: SecurityAgent (bytecode), SimulationAgent (attacks), SocialIntelAgent (deployer). Write final RISK_SCORE to RiskRegistry.',
+        JSON.stringify({ contract_address: addr, source: 'dashboard_manual', ts: Math.floor(Date.now()/1000) }),
+        4,        // Capability.Orchestration
+        deadline,
+        2,        // Priority.High
+        { value: reward }
+      );
+
+      this.toast(`📋 Scan task posted! Tx: ${tx.hash.slice(0,18)}…`, 5000);
+      this.addEvent('🎯', `Manual scan triggered`, addr.slice(0,20) + '…', '#00d4ff');
+
+      // Show SCANNING placeholder card immediately
+      this.scans = this.scans.filter(s => s.addr.toLowerCase() !== addr.toLowerCase());
+      this.scans.unshift({ addr, score: 0, confidence: 0, summary: 'Agents scanning — results arrive in ~5 seconds', scannedAt: Math.floor(Date.now()/1000), taskId: 0, status: 'scanning' });
+      this.renderScans();
+
+      await tx.wait();
+      this.toast(`✅ Scan task confirmed — agents are bidding`, 4000);
+    } catch(e) {
+      this.toast(`Scan failed: ${e.message.slice(0,80)}`, 5000);
+    }
+  },
+
+  // ── Tabs ───────────────────────────────────────────────────────────────────
+
+  switchLeftTab(tab) {
+    this.activeLeftTab = tab;
+    document.getElementById('scan-list').style.display    = tab === 'live'    ? '' : 'none';
+    document.getElementById('history-list').style.display = tab === 'history' ? '' : 'none';
+    ['live', 'history'].forEach(t => {
+      document.getElementById(`left-tab-${t}`).classList.toggle('active', t === tab);
+    });
+    if (tab === 'history') this.loadHistory();
+  },
+
+  switchRightTab(tab) {
+    this.activeRightTab = tab;
+    document.getElementById('agent-list').style.display       = tab === 'swarm'       ? '' : 'none';
+    document.getElementById('leaderboard-list').style.display = tab === 'leaderboard' ? '' : 'none';
+    ['swarm', 'leaderboard'].forEach(t => {
+      document.getElementById(`right-tab-${t}`).classList.toggle('active', t === tab);
+    });
+    if (tab === 'leaderboard') this.loadLeaderboard();
+  },
+
+  // ── History ────────────────────────────────────────────────────────────────
+
+  async loadHistory() {
+    try {
+      const block    = await this.provider.getBlockNumber();
+      const fromBlock = Math.max(0, block - 1000);
+      const events   = await this.riskRegistry.queryFilter('ContractScanned', fromBlock, 'latest');
+      this.historyScans = events.map(ev => ({
+        addr:        ev.args.contractAddr,
+        score:       Number(ev.args.riskScore),
+        confidence:  Number(ev.args.confidence),
+        summary:     ev.args.summary,
+        taskId:      Number(ev.args.taskId),
+        blockNumber: ev.blockNumber,
+      })).reverse();   // newest first
+      this.renderHistory();
+    } catch(e) {
+      console.warn('loadHistory:', e);
+    }
+  },
+
+  renderHistory() {
+    const rows = document.getElementById('history-rows');
+    if (!this.historyScans.length) {
+      rows.innerHTML = '<div style="text-align:center;color:var(--text-dim);padding:30px;font-size:11px">No scans in last 1000 blocks</div>';
+      return;
+    }
+    rows.innerHTML = this.historyScans.map(s => {
+      const color = this.scoreColor(s.score);
+      return `
+        <div class="history-row" onclick="App.showDetail('${s.addr}')">
+          <div>
+            <div class="h-addr">${s.addr.slice(0,12)}…${s.addr.slice(-4)}</div>
+            <div class="h-meta">Block #${s.blockNumber}</div>
+          </div>
+          <div style="text-align:right;font-weight:700;color:${color}">${s.score}</div>
+          <div style="text-align:right;color:var(--text-dim)">${s.confidence}%</div>
+        </div>`;
+    }).join('');
+  },
+
+  // ── Leaderboard ────────────────────────────────────────────────────────────
+
+  async loadLeaderboard() {
+    try {
+      const block    = await this.provider.getBlockNumber();
+      const fromBlock = Math.max(0, block - 5000);
+      const events   = await this.riskRegistry.queryFilter('ContractScanned', fromBlock, 'latest');
+      const lb = {};
+      for (const ev of events) {
+        const key   = ev.args.scanner.toLowerCase();
+        const score = Number(ev.args.riskScore);
+        if (!lb[key]) lb[key] = { scanner: ev.args.scanner, count: 0, totalScore: 0, criticals: 0 };
+        lb[key].count++;
+        lb[key].totalScore += score;
+        if (score >= 90) lb[key].criticals++;
+      }
+      this.leaderboard = Object.values(lb)
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 10);
+      this.renderLeaderboard();
+    } catch(e) {
+      console.warn('loadLeaderboard:', e);
+    }
+  },
+
+  renderLeaderboard() {
+    const rows = document.getElementById('leaderboard-rows');
+    if (!this.leaderboard.length) {
+      rows.innerHTML = '<div style="text-align:center;color:var(--text-dim);padding:30px;font-size:11px">No scanner data yet</div>';
+      return;
+    }
+    const medals = ['🥇','🥈','🥉'];
+    rows.innerHTML = this.leaderboard.map((row, i) => {
+      const avg   = row.count ? Math.round(row.totalScore / row.count) : 0;
+      const color = this.scoreColor(avg);
+      return `
+        <div class="lb-row">
+          <span class="lb-rank">${medals[i] ?? (i + 1)}</span>
+          <div>
+            <div class="lb-scanner">${row.scanner.slice(0,8)}…${row.scanner.slice(-4)}</div>
+            <div style="font-size:8px;color:var(--text-dim);margin-top:1px">🚨 ${row.criticals} critical${row.criticals !== 1 ? 's' : ''}</div>
+          </div>
+          <span class="lb-scans">${row.count}</span>
+          <span class="lb-avg" style="color:${color}">${avg}</span>
+        </div>`;
+    }).join('');
+  },
+
+  updateLeaderboardEntry(scanner, score) {
+    const key      = scanner.toLowerCase();
+    const existing = this.leaderboard.find(r => r.scanner.toLowerCase() === key);
+    if (existing) {
+      existing.count++;
+      existing.totalScore += score;
+      if (score >= 90) existing.criticals++;
+    } else {
+      this.leaderboard.push({ scanner, count: 1, totalScore: score, criticals: score >= 90 ? 1 : 0 });
+    }
+    this.leaderboard.sort((a, b) => b.count - a.count);
+    this.leaderboard = this.leaderboard.slice(0, 10);
+    if (this.activeRightTab === 'leaderboard') this.renderLeaderboard();
   },
 };
 

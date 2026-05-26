@@ -108,6 +108,44 @@ RULES = [
             "Return JSON: {factory_pattern, contracts, risk_assessment, recommended_action}."
         ),
     ),
+    # ── AuraMEV Rule ──────────────────────────────────────────────────────────
+    dict(
+        name="sandwich_pattern_detected",
+        label="🥪 Sandwich Attack Pattern",
+        cap=Capability.Analysis,
+        reward_eth=0.002,
+        cooldown=15,
+        title="[AURA MEV] 🥪 Sandwich detected — {detail}",
+        description=(
+            "A potential sandwich attack pattern was detected in this Somnia block. "
+            "A single wallet submitted 2+ transactions with gas prices significantly above "
+            "the block median, surrounding other swap transactions — the classic sandwich setup. "
+            "Identify: (1) attacker wallet and gas premium above block median, "
+            "(2) likely victim transaction and token being swapped, "
+            "(3) estimated value extracted from the victim in USD. "
+            "Return JSON: {attacker, victim_tx, token, extracted_value_usd, "
+            "pattern_confidence, gas_premium_pct, alert_level}."
+        ),
+    ),
+    # ── AuraDAO Rule ──────────────────────────────────────────────────────────
+    dict(
+        name="governance_proposal_created",
+        label="🗳️  DAO Proposal Detected",
+        cap=Capability.Research,
+        reward_eth=0.002,
+        cooldown=30,
+        title="[AURA DAO] 🗳️ Analyse governance proposal: {detail}",
+        description=(
+            "A new on-chain governance proposal was submitted on Somnia. "
+            "Decode the calldata and translate the proposal into exactly 3 plain-English bullet points. "
+            "Then score each dimension 0–100: "
+            "technical_risk (can the proposal be exploited?), "
+            "financial_risk (does it move treasury or protocol funds?), "
+            "security_risk (does it modify permissions, roles, or upgrade logic?). "
+            "Return JSON: {summary_bullets, tech_risk, financial_risk, security_risk, "
+            "overall_risk, recommendation}."
+        ),
+    ),
 
     # ── Existing AgentMesh Rules ───────────────────────────────────────────────
     dict(
@@ -189,6 +227,13 @@ RULES = [
 
 # Track deployer → block windows for rapid-deploy detection
 _deploy_tracker: dict[str, list[int]] = {}
+
+# Known governance propose() selectors (first 4 bytes of keccak256 of ABI sig)
+_GOV_SELECTORS: frozenset[bytes] = frozenset({
+    bytes.fromhex("7d5e81e2"),  # propose(address[],uint256[],bytes[],string)        OZ Governor
+    bytes.fromhex("da95691a"),  # propose(address[],uint256[],string[],bytes[],string) Compound
+    bytes.fromhex("b18d5600"),  # propose(uint256)                                    simple
+})
 
 
 # ── Sentinel agent ────────────────────────────────────────────────────────────
@@ -339,6 +384,38 @@ class SentinelAgent(BaseAgent):
                         "high_value_task",
                         f"{val_eth:.4f} STT (block #{block_num})",
                     )
+
+            # ── 🆕 AuraDAO: Governance Proposal Detection ────────────────────
+            inp = tx.get("input") or b""
+            if isinstance(inp, (bytes, bytearray)) and len(inp) >= 4:
+                if inp[:4] in _GOV_SELECTORS:
+                    await self._fire(
+                        "governance_proposal_created",
+                        f"tx {tx.hash.hex()[:16]}… in block #{block_num}",
+                    )
+
+        # ── 🆕 AuraMEV: Sandwich Attack Detection ────────────────────────────
+        if len(block.transactions) >= 3:
+            try:
+                gas_prices = [tx.get("gasPrice", 0) for tx in block.transactions]
+                sorted_gas  = sorted(g for g in gas_prices if g > 0)
+                if sorted_gas:
+                    median_gas = sorted_gas[len(sorted_gas) // 2]
+                    sender_gas: dict[str, list[int]] = {}
+                    for tx in block.transactions:
+                        s = tx["from"].lower()
+                        sender_gas.setdefault(s, []).append(tx.get("gasPrice", 0))
+                    for s, gps in sender_gas.items():
+                        # Sandwich: same wallet, ≥2 txs, max gas ≥2× block median
+                        if len(gps) >= 2 and max(gps) >= median_gas * 2:
+                            pct = int((max(gps) / median_gas - 1) * 100)
+                            await self._fire(
+                                "sandwich_pattern_detected",
+                                f"block #{block_num} · {s[:12]}… (+{pct}% gas)",
+                            )
+                            break   # one sandwich alert per block is enough
+            except Exception:
+                pass
 
         # ── Rolling velocity window ───────────────────────────────────────────
         self._market_tx_window.append(block_market_txs)
