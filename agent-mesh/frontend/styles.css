@@ -1757,3 +1757,74 @@ body {
   .page-header h1 { font-size: 1.3rem; }
   .net-intel-grid { grid-template-columns: repeat(2,1fr); }
 }
+
+/* ── Scroll Navigation Buttons ──────────────────────────────────────────── */
+.scroll-nav {
+  position: fixed;
+  bottom: 28px;
+  right: 24px;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none; /* container is pass-through; children opt-in */
+}
+
+.scroll-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1px solid var(--border2);
+  background: rgba(13,16,23,0.92);
+  color: var(--t2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(10px) scale(0.88);
+  pointer-events: none;
+  transition: opacity 0.28s ease, transform 0.28s ease, background 0.2s, color 0.2s, border-color 0.2s, box-shadow 0.2s;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.scroll-btn.visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.scroll-btn:hover {
+  background: var(--bg4);
+  color: var(--cyan);
+  border-color: var(--cyan);
+  box-shadow: 0 0 14px rgba(0,212,255,0.22), 0 4px 18px rgba(0,0,0,0.5);
+}
+
+.scroll-btn:active {
+  transform: scale(0.92);
+}
+
+/* Back-to-top: indigo accent */
+#scroll-top-btn.visible {
+  border-color: rgba(108,99,255,0.35);
+  color: var(--indigo);
+}
+#scroll-top-btn.visible:hover {
+  border-color: var(--indigo);
+  color: var(--indigo);
+  box-shadow: 0 0 14px rgba(108,99,255,0.28), 0 4px 18px rgba(0,0,0,0.5);
+}
+
+/* Scroll-down: cyan accent */
+#scroll-down-btn.visible {
+  border-color: rgba(0,212,255,0.28);
+  color: var(--cyan);
+}
+
+@media (max-width: 640px) {
+  .scroll-nav { bottom: 20px; right: 16px; }
+  .scroll-btn  { width: 38px; height: 38px; }
+}

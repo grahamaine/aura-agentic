@@ -250,6 +250,22 @@
     <!-- Views are injected here by app.js -->
   </main>
 
+  <!-- ── Scroll navigation ──────────────────────────────────────────────── -->
+  <div class="scroll-nav" id="scroll-nav">
+    <!-- Back to top -->
+    <button class="scroll-btn" id="scroll-top-btn" title="Back to top" aria-label="Back to top">
+      <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18">
+        <path fill-rule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clip-rule="evenodd"/>
+      </svg>
+    </button>
+    <!-- Scroll down -->
+    <button class="scroll-btn" id="scroll-down-btn" title="Scroll down" aria-label="Scroll down">
+      <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18">
+        <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/>
+      </svg>
+    </button>
+  </div>
+
 </div>
 
 <!-- ── Wallet selection modal ──────────────────────────────────────── -->
@@ -332,19 +348,25 @@
 <script>
   // ── Splash dismiss ──────────────────────────────────────────────────────────
   (function() {
-    const SPLASH_MS = 2800;
+    const SPLASH_MS = 2800;  // total splash duration
+    const MIN_MS    = 1400;  // minimum brand-exposure before early dismiss
+    // Use a LOCAL startedAt so slow-loading pages (high TTFB) don't skip the splash.
+    // performance.now() counts from navigation-start; on slow connections it can
+    // already be >1400 ms when this script runs, causing instant dismiss.
+    const startedAt = Date.now();
+
     function dismissSplash() {
       const el = document.getElementById('splash');
       if (!el) return;
       el.classList.add('out');
       setTimeout(() => { if (el.parentNode) el.parentNode.removeChild(el); }, 700);
     }
-    // Dismiss after SPLASH_MS, or sooner if DOMContentLoaded + fonts are ready
     const timer = setTimeout(dismissSplash, SPLASH_MS);
+    // Early dismiss only if fonts have been ready for at least MIN_MS since
+    // this script block started (i.e. the user has actually seen the splash).
     document.fonts.ready.then(() => {
-      // Only early-dismiss if at least 1.4s has passed (preserve min brand exposure)
-      const elapsed = performance.now();
-      if (elapsed >= 1400) { clearTimeout(timer); dismissSplash(); }
+      const elapsed = Date.now() - startedAt;
+      if (elapsed >= MIN_MS) { clearTimeout(timer); dismissSplash(); }
     });
   })();
 
@@ -354,6 +376,35 @@
       navigator.serviceWorker.register('/sw.js').catch(() => {});
     });
   }
+
+  // ── Scroll navigation ───────────────────────────────────────────────────────
+  (function () {
+    const content = document.getElementById('content');
+    const topBtn  = document.getElementById('scroll-top-btn');
+    const downBtn = document.getElementById('scroll-down-btn');
+    if (!content || !topBtn || !downBtn) return;
+
+    function updateBtns() {
+      const hasOverflow = content.scrollHeight > content.clientHeight + 30;
+      const atTop       = content.scrollTop < 80;
+      const nearBottom  = content.scrollTop + content.clientHeight >= content.scrollHeight - 80;
+      topBtn .classList.toggle('visible', !atTop);
+      downBtn.classList.toggle('visible', hasOverflow && !nearBottom);
+    }
+
+    // Re-check on scroll
+    content.addEventListener('scroll', updateBtns, { passive: true });
+
+    // Re-check whenever a view is injected (app.js replaces innerHTML of #content)
+    new MutationObserver(updateBtns).observe(content, { childList: true });
+
+    // Click handlers
+    topBtn .addEventListener('click', () => content.scrollTo({ top: 0, behavior: 'smooth' }));
+    downBtn.addEventListener('click', () => content.scrollBy({ top: content.clientHeight - 60, behavior: 'smooth' }));
+
+    // Initial state after first view renders (~600 ms)
+    setTimeout(updateBtns, 600);
+  })();
 </script>
 </body>
 </html>
