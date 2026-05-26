@@ -50,22 +50,19 @@
   --shadow-glow-indigo: 0 0 20px rgba(108,99,255,0.15);
 }
 
-html {
-  font-size: 14px;
-  height: 100%;
-  /* Prevent iOS bounce scroll on the root */
-  overflow: hidden;
-}
+html { font-size: 14px; }
+
 body {
+  /* position:fixed + inset:0 = exactly the visible viewport on every browser
+     and every phone, no matter what the address bar / keyboard is doing.
+     This is the only reliable way to pin an app shell on iOS Safari. */
+  position: fixed;
+  inset: 0;
   background: var(--bg);
   color: var(--t1);
   font-family: var(--font-sans);
   font-weight: 400;
   letter-spacing: 0.01em;
-  /* Use dvh so mobile browser chrome is excluded; fall back to svh then vh */
-  height: 100dvh;
-  height: 100svh;
-  height: 100vh;      /* last fallback */
   display: flex;
   overflow: hidden;
 }
@@ -73,7 +70,8 @@ body {
 /* ── Sidebar ───────────────────────────────────────────────────────────── */
 .sidebar {
   width: var(--sidebar-w);
-  height: 100%;           /* fills the flex parent exactly — no overflow */
+  /* body is position:fixed, so the sidebar flex-child fills full height
+     automatically — no explicit height needed */
   background: linear-gradient(180deg, var(--bg2) 0%, #0b0e18 100%);
   border-right: 1px solid var(--border);
   display: flex;
@@ -227,11 +225,10 @@ body {
 /* ── Main wrapper ──────────────────────────────────────────────────────── */
 .main-wrapper {
   flex: 1;
+  min-width: 0;           /* prevents flex blow-out on narrow screens */
   display: flex;
   flex-direction: column;
-  height: 100%;           /* fixed height so .content overflow-y works */
-  min-width: 0;           /* prevent flex blowout on narrow screens */
-  overflow: hidden;
+  overflow: hidden;       /* height is inherited from fixed body */
 }
 
 /* ── Topbar ────────────────────────────────────────────────────────────── */
@@ -243,9 +240,9 @@ body {
   align-items: center;
   gap: 12px;
   padding: 0 20px;
-  flex-shrink: 0;
-  position: sticky;
-  top: 0;
+  flex-shrink: 0;   /* never shrinks — content scrolls underneath it */
+  /* position:sticky removed — it doesn't work inside overflow:hidden parents.
+     The topbar is now always pinned because .main-wrapper is a fixed flex column. */
   z-index: 40;
   box-shadow: 0 1px 0 rgba(108,99,255,0.15);
 }
@@ -548,11 +545,32 @@ body {
 /* ── Content ───────────────────────────────────────────────────────────── */
 .content {
   flex: 1;
-  min-height: 0;          /* KEY: lets flex-child shrink below content height on iOS */
-  overflow-y: auto;
+  min-height: 0;              /* KEY — lets the flex child shrink below content height */
+  overflow-y: scroll;         /* 'scroll' not 'auto' — always renders the scrollbar track */
   overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;  /* smooth momentum scroll on iOS */
+  -webkit-overflow-scrolling: touch;  /* momentum scroll on iOS */
   overscroll-behavior-y: contain;     /* prevent pull-to-refresh hijack */
+
+  /* ── Custom scrollbar — visible brand indicator on right edge ─────────── */
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(108,99,255,0.55) rgba(13,16,23,0.9);
+}
+/* WebKit / Blink (Chrome, Safari, Edge, Android) */
+.content::-webkit-scrollbar {
+  width: 5px;
+}
+.content::-webkit-scrollbar-track {
+  background: rgba(13,16,23,0.9);
+  border-left: 1px solid rgba(28,34,54,0.6);
+}
+.content::-webkit-scrollbar-thumb {
+  background: linear-gradient(to bottom, var(--cyan), var(--indigo), var(--purple));
+  border-radius: 3px;
+  min-height: 40px;
+}
+.content::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(to bottom, var(--indigo), var(--purple));
 }
 
 /* ── Shared layout utilities ───────────────────────────────────────────── */
@@ -1770,30 +1788,30 @@ body {
 @media (max-width: 860px) {
   :root { --sidebar-w: 0px; }
 
-  /* Sidebar becomes a slide-in drawer */
+  /* Sidebar becomes a fixed overlay drawer.
+     body is already position:fixed so sidebar sits on top of the app shell. */
   .sidebar {
     position: fixed;
     left: 0; top: 0; bottom: 0;
-    width: 240px;
-    height: 100%;
+    width: min(240px, 80vw);  /* never wider than 80% of the screen */
     transform: translateX(-100%);
     box-shadow: none;
     z-index: 50;
   }
   .sidebar.open {
     transform: translateX(0);
-    box-shadow: 6px 0 32px rgba(0,0,0,0.6);
+    box-shadow: 6px 0 32px rgba(0,0,0,0.65);
   }
 
   .menu-toggle { display: flex; }
 
-  .grid-4   { grid-template-columns: 1fr 1fr; }
-  .grid-3   { grid-template-columns: 1fr 1fr; }
-  .two-col  { grid-template-columns: 1fr; }
+  .grid-4    { grid-template-columns: 1fr 1fr; }
+  .grid-3    { grid-template-columns: 1fr 1fr; }
+  .two-col   { grid-template-columns: 1fr; }
   .three-col { grid-template-columns: 1fr; }
   .block-counter { display: none; }
 
-  /* Tighter view padding on tablet */
+  /* Tighter padding on tablet */
   .view { padding: 18px 16px; }
   .page-header { margin-bottom: 18px; }
   .page-header h1 { font-size: 1.4rem; }
@@ -1958,6 +1976,6 @@ body {
 }
 
 @media (max-width: 640px) {
-  .scroll-nav { bottom: 20px; right: 16px; }
-  .scroll-btn  { width: 38px; height: 38px; }
+  .scroll-nav { bottom: 18px; right: 12px; gap: 8px; }
+  .scroll-btn  { width: 46px; height: 46px; } /* larger touch target on mobile */
 }
