@@ -222,20 +222,9 @@ function renderDashboard(root) {
       </div>
     </div>
 
-    <!-- Main grid -->
+    <!-- Main grid — Live Task Feed LEFT, Agent Mesh RIGHT -->
     <div class="two-col" style="margin-bottom:16px;align-items:start">
-      <!-- Agent Mesh Visualizer -->
-      <div class="card">
-        <div class="card-header">
-          <h2>🕸️ Agent Mesh — Live</h2>
-          <span class="pill" style="background:rgba(34,197,94,.12);color:var(--green)">● 5 Online</span>
-        </div>
-        <div class="card-body" style="padding:0">
-          <div class="mesh-canvas" id="mesh-canvas"></div>
-        </div>
-      </div>
-
-      <!-- Live Task Feed -->
+      <!-- Live Task Feed (left) -->
       <div class="card">
         <div class="card-header">
           <h2>⚡ Live Task Feed</h2>
@@ -245,6 +234,17 @@ function renderDashboard(root) {
           <div class="task-list" id="dash-task-list">
             ${state.tasks.slice(0,5).map(taskItemHTML).join("")}
           </div>
+        </div>
+      </div>
+
+      <!-- Agent Mesh Visualizer (right) -->
+      <div class="card">
+        <div class="card-header">
+          <h2>🕸️ Agent Mesh — Live</h2>
+          <span class="pill" style="background:rgba(34,197,94,.12);color:var(--green)">● 5 Online</span>
+        </div>
+        <div class="card-body" style="padding:0">
+          <div class="mesh-canvas" id="mesh-canvas"></div>
         </div>
       </div>
     </div>
@@ -2736,9 +2736,27 @@ document.addEventListener("DOMContentLoaded", () => {
     if (e.target === document.getElementById("modal-overlay")) closeModal();
   });
 
-  // Sidebar toggle (mobile)
+  // Sidebar toggle (mobile) — with backdrop
+  function openSidebar() {
+    document.getElementById("sidebar").classList.add("open");
+    document.getElementById("sidebar-backdrop").classList.add("visible");
+    document.body.style.overflow = "hidden"; // prevent body scroll while drawer open
+  }
+  function closeSidebar() {
+    document.getElementById("sidebar").classList.remove("open");
+    document.getElementById("sidebar-backdrop").classList.remove("visible");
+    document.body.style.overflow = "";
+  }
   document.getElementById("menu-toggle").addEventListener("click", () => {
-    document.getElementById("sidebar").classList.toggle("open");
+    document.getElementById("sidebar").classList.contains("open") ? closeSidebar() : openSidebar();
+  });
+  // Tap backdrop → close
+  document.getElementById("sidebar-backdrop").addEventListener("click", closeSidebar);
+  // Tap any nav item on mobile → auto-close drawer
+  document.querySelectorAll(".nav-item").forEach(btn => {
+    btn.addEventListener("click", () => {
+      if (window.innerWidth <= 860) closeSidebar();
+    });
   });
 
   // Demo toggle

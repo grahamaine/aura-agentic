@@ -50,14 +50,22 @@
   --shadow-glow-indigo: 0 0 20px rgba(108,99,255,0.15);
 }
 
-html { font-size: 14px; }
+html {
+  font-size: 14px;
+  height: 100%;
+  /* Prevent iOS bounce scroll on the root */
+  overflow: hidden;
+}
 body {
   background: var(--bg);
   color: var(--t1);
   font-family: var(--font-sans);
   font-weight: 400;
   letter-spacing: 0.01em;
-  min-height: 100vh;
+  /* Use dvh so mobile browser chrome is excluded; fall back to svh then vh */
+  height: 100dvh;
+  height: 100svh;
+  height: 100vh;      /* last fallback */
   display: flex;
   overflow: hidden;
 }
@@ -65,15 +73,31 @@ body {
 /* ── Sidebar ───────────────────────────────────────────────────────────── */
 .sidebar {
   width: var(--sidebar-w);
-  min-height: 100vh;
+  height: 100%;           /* fills the flex parent exactly — no overflow */
   background: linear-gradient(180deg, var(--bg2) 0%, #0b0e18 100%);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
   z-index: 50;
-  transition: transform 0.25s ease;
+  transition: transform 0.28s cubic-bezier(0.4,0,0.2,1);
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
 }
+
+/* ── Sidebar backdrop (mobile tap-to-close) ───────────────────────────── */
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  z-index: 49;
+  animation: fadeIn 0.2s ease;
+}
+.sidebar-backdrop.visible { display: block; }
 
 .sidebar-logo {
   display: flex;
@@ -205,7 +229,8 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100%;           /* fixed height so .content overflow-y works */
+  min-width: 0;           /* prevent flex blowout on narrow screens */
   overflow: hidden;
 }
 
@@ -523,8 +548,11 @@ body {
 /* ── Content ───────────────────────────────────────────────────────────── */
 .content {
   flex: 1;
+  min-height: 0;          /* KEY: lets flex-child shrink below content height on iOS */
   overflow-y: auto;
   overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;  /* smooth momentum scroll on iOS */
+  overscroll-behavior-y: contain;     /* prevent pull-to-refresh hijack */
 }
 
 /* ── Shared layout utilities ───────────────────────────────────────────── */
@@ -1728,34 +1756,139 @@ body {
 .sentinel-tr-title { font-size: 0.8rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sentinel-tr-meta  { font-size: 0.62rem; color: var(--t3); margin-top: 3px; display: flex; gap: 5px; flex-wrap: wrap; }
 
-/* ── Responsive ────────────────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════════════
+   RESPONSIVE — mobile-first, covers every screen size
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Tablet landscape  ≤ 1100px ─────────────────────────────────────── */
 @media (max-width: 1100px) {
   .grid-4 { grid-template-columns: repeat(2, 1fr); }
+  .net-intel-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
-@media (max-width: 800px) {
+/* ── Tablet portrait  ≤ 860px ───────────────────────────────────────── */
+@media (max-width: 860px) {
   :root { --sidebar-w: 0px; }
-  .sidebar { position: fixed; left: 0; top: 0; bottom: 0; width: 220px; transform: translateX(-100%); transition: transform 0.25s; }
-  .sidebar.open { transform: translateX(0); box-shadow: 4px 0 24px rgba(0,0,0,0.5); }
+
+  /* Sidebar becomes a slide-in drawer */
+  .sidebar {
+    position: fixed;
+    left: 0; top: 0; bottom: 0;
+    width: 240px;
+    height: 100%;
+    transform: translateX(-100%);
+    box-shadow: none;
+    z-index: 50;
+  }
+  .sidebar.open {
+    transform: translateX(0);
+    box-shadow: 6px 0 32px rgba(0,0,0,0.6);
+  }
+
   .menu-toggle { display: flex; }
-  .grid-4 { grid-template-columns: 1fr 1fr; }
-  .grid-3 { grid-template-columns: 1fr 1fr; }
-  .two-col { grid-template-columns: 1fr; }
+
+  .grid-4   { grid-template-columns: 1fr 1fr; }
+  .grid-3   { grid-template-columns: 1fr 1fr; }
+  .two-col  { grid-template-columns: 1fr; }
   .three-col { grid-template-columns: 1fr; }
   .block-counter { display: none; }
+
+  /* Tighter view padding on tablet */
+  .view { padding: 18px 16px; }
+  .page-header { margin-bottom: 18px; }
+  .page-header h1 { font-size: 1.4rem; }
 }
 
-@media (max-width: 560px) {
+/* ── Large phone  ≤ 640px ───────────────────────────────────────────── */
+@media (max-width: 640px) {
   .demo-toggle { display: none; }
   .topbar { padding: 0 14px; gap: 8px; }
+  .topbar-title { font-size: 0.82rem; }
+
+  /* Wallet button: show icon only to save space */
+  .wallet-btn span { display: none; }
+  .wallet-btn { padding: 7px 12px; }
+
+  /* Wallet info: hide balance, keep address short */
+  .wi-bal { display: none; }
+
+  .grid-4, .grid-3 { grid-template-columns: 1fr 1fr; }
+  .grid-2  { grid-template-columns: 1fr 1fr; }
+  .two-col { grid-template-columns: 1fr; }
+
+  .stat-value { font-size: 1.7rem; }
+  .net-intel-grid { grid-template-columns: repeat(2, 1fr); }
+
+  /* Pipeline subtasks stack vertically on phones */
+  .pipeline-subtasks-row { flex-direction: column; }
+
+  /* Sentinel loop wraps gracefully */
+  .sentinel-loop { gap: 6px; row-gap: 16px; }
+  .sls-icon { width: 38px; height: 38px; font-size: 1rem; }
 }
 
-@media (max-width: 500px) {
-  .grid-4, .grid-3, .grid-2 { grid-template-columns: 1fr; }
+/* ── Small phone  ≤ 480px ───────────────────────────────────────────── */
+@media (max-width: 480px) {
   .view { padding: 14px 12px; }
-  .stat-value { font-size: 1.6rem; }
-  .page-header h1 { font-size: 1.3rem; }
-  .net-intel-grid { grid-template-columns: repeat(2,1fr); }
+  .page-header h1 { font-size: 1.2rem; }
+  .page-header h1::after { display: none; } /* hide decorative underline if present */
+
+  .grid-4, .grid-3, .grid-2 { grid-template-columns: 1fr; }
+  .two-col, .three-col       { grid-template-columns: 1fr; }
+
+  .stat-value { font-size: 1.5rem; }
+  .net-intel-grid { grid-template-columns: 1fr 1fr; }
+
+  /* Topbar: remove gap to fit everything */
+  .topbar { padding: 0 10px; gap: 6px; height: 50px; }
+  .topbar-title { font-size: 0.76rem; letter-spacing: 0.06em; }
+
+  /* Card body tighter */
+  .card-body { padding: 12px 14px; }
+  .card-header { padding: 12px 14px; }
+  .card-header h2 { font-size: 0.78rem; }
+
+  /* Contract rows stack */
+  .contract-row { flex-direction: column; align-items: flex-start; gap: 6px; }
+
+  /* Tracker steps get smaller */
+  .tracker-dot { width: 22px; height: 22px; font-size: 0.62rem; }
+  .tracker-step-label { font-size: 0.5rem; }
+
+  /* Sentinel status bar wraps */
+  .sentinel-status-bar { padding: 10px 14px; gap: 10px; }
+  .ssb-stats { gap: 12px; }
+  .ssb-stat-val { font-size: 0.95rem; }
+
+  /* Task tracker row scrolls horizontally, don't truncate */
+  .tracker-row { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 6px; }
+
+  /* Scroll nav sits above mobile bottom safe area */
+  .scroll-nav { bottom: max(20px, env(safe-area-inset-bottom, 20px)); right: 14px; }
+}
+
+/* ── Very small phone  ≤ 360px ──────────────────────────────────────── */
+@media (max-width: 360px) {
+  .view { padding: 12px 10px; }
+  .topbar { padding: 0 8px; gap: 4px; height: 48px; }
+  .topbar-title { max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .wallet-btn { padding: 6px 10px; }
+  .stat-value { font-size: 1.3rem; }
+  .card-body  { padding: 10px 12px; }
+  .card-header { padding: 10px 12px; }
+  .net-intel-grid { grid-template-columns: 1fr; }
+  .ssb-stats { flex-wrap: wrap; gap: 10px; }
+  .page-header h1 { font-size: 1.1rem; }
+}
+
+/* ── iOS safe area padding (notch / home bar) ───────────────────────── */
+@supports (padding: max(0px)) {
+  .topbar {
+    padding-left:  max(20px, env(safe-area-inset-left));
+    padding-right: max(20px, env(safe-area-inset-right));
+  }
+  .sidebar { padding-bottom: env(safe-area-inset-bottom); }
+  .content { padding-bottom: env(safe-area-inset-bottom); }
 }
 
 /* ── Scroll Navigation Buttons ──────────────────────────────────────────── */
