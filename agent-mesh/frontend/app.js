@@ -1616,11 +1616,12 @@ function updateBadges() {
 }
 
 // ── Wallet ─────────────────────────────────────────────────────────────────────
-const WC_PROJECT_ID    = "5b3287538b8b8f55ba08cdd88b84e54c";
-const SOMNIA_CHAIN_HEX = "0xC488"; // 50312 in hex
+const WC_PROJECT_ID      = "5b3287538b8b8f55ba08cdd88b84e54c";
+const THIRDWEB_CLIENT_ID = "51b8758421691c021a6e7af2452fea09"; // frontend only — secret key never in browser
+const SOMNIA_CHAIN_HEX   = "0xC488"; // 50312 in hex
 
-// Holds the active WalletConnect EthereumProvider so we can disconnect it
-let _wcProvider = null;
+let _twWallet   = null;  // active Thirdweb Wallet instance (MetaMask / inAppWallet)
+let _wcProvider = null;  // active WC EthereumProvider (fallback path)
 
 // ── Wallet modal ──────────────────────────────────────────────────────────────
 function showWalletModal() {
@@ -1631,6 +1632,25 @@ function showWalletModal() {
 function closeWalletModal() {
   const overlay = document.getElementById("wallet-modal-overlay");
   if (overlay) overlay.classList.add("hidden");
+}
+
+// ── Shared Thirdweb post-connect handler ──────────────────────────────────────
+// Called after any Thirdweb wallet.connect() resolves with an Account object.
+async function _onThirdwebConnected(address, via) {
+  state.wallet = address;
+  try {
+    const rpc = new ethers.JsonRpcProvider(SOMNIA_RPC);
+    const bal = await rpc.getBalance(address);
+    state.balance = parseFloat(ethers.formatEther(bal)).toFixed(4);
+  } catch { state.balance = "0"; }
+  setWalletConnected(address);
+  const dot = document.getElementById("net-dot");
+  if (dot) dot.classList.add("connected");
+  const lbl = document.getElementById("net-label");
+  if (lbl) lbl.textContent = "Somnia Testnet";
+  toast("success", "Wallet Connected", `${address.slice(0,10)}… · ${state.balance} STT`);
+  addEvent("success", "🔗", "Wallet connected", `${address.slice(0,10)}… via ${via}`);
+  loadChainData();
 }
 
 // ── Connected / disconnected UI state ─────────────────────────────────────────
@@ -1669,7 +1689,12 @@ function setWalletDisconnected() {
 }
 
 function disconnectWallet() {
-  // Disconnect WalletConnect session if active
+  // Disconnect Thirdweb wallet (MetaMask / inAppWallet / WC via Thirdweb)
+  if (_twWallet) {
+    try { _twWallet.disconnect(); } catch (_) {}
+    _twWallet = null;
+  }
+  // Disconnect legacy WC EthereumProvider fallback
   if (_wcProvider) {
     try { _wcProvider.disconnect(); } catch (_) {}
     _wcProvider = null;
@@ -1710,101 +1735,111 @@ async function _onWalletConnected(provider) {
 }
 
 // ── MetaMask ──────────────────────────────────────────────────────────────────
+// Thirdweb handles chain switching to Somnia automatically via chain param.
+// Legacy window.ethereum path is the fallback if Thirdweb SDK hasn't loaded.
 async function connectMetaMask() {
+  closeWalletModal();
+
+  // ── Path A: Thirdweb (preferred — auto chain switch) ──
+  if (window._tw) {
+    try {
+      const { createWallet, client, somniaChain } = window._tw;
+      const wallet  = createWallet("io.metamask");
+      const account = await wallet.connect({ client, chain: somniaChain });
+      _twWallet = wallet;
+      await _onThirdwebConnected(account.address, "MetaMask");
+      return;
+    } catch (e) {
+      const m = e.message || "";
+      if (m.includes("User rejected") || m.includes("rejected") || m.includes("denied")) return;
+      console.warn("[MetaMask] Thirdweb path failed, trying legacy:", m);
+    }
+  }
+
+  // ── Path B: Legacy window.ethereum ──
   if (!window.ethereum) {
-    toast("warn","No MetaMask","Install the MetaMask browser extension to continue");
+    toast("warn", "No MetaMask", "Install MetaMask browser extension to continue");
     return;
   }
   try {
     await window.ethereum.request({ method: "eth_requestAccounts" });
     try {
-      await window.ethereum.request({ method:"wallet_switchEthereumChain", params:[{chainId:SOMNIA_CHAIN_ID}] });
-    } catch(sw) {
-      if (sw.code===4902) {
-        await window.ethereum.request({ method:"wallet_addEthereumChain", params:[{
-          chainId: SOMNIA_CHAIN_ID,
-          chainName: "Somnia Testnet (Shannon)",
-          nativeCurrency: {name:"STT",symbol:"STT",decimals:18},
-          rpcUrls:[SOMNIA_RPC],
-          blockExplorerUrls:[EXPLORER_TESTNET],
+      await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: SOMNIA_CHAIN_HEX }] });
+    } catch (sw) {
+      if (sw.code === 4902 || sw.code === -32603) {
+        await window.ethereum.request({ method: "wallet_addEthereumChain", params: [{
+          chainId: SOMNIA_CHAIN_HEX, chainName: "Somnia Testnet",
+          nativeCurrency: { name: "STT", symbol: "STT", decimals: 18 },
+          rpcUrls: [SOMNIA_RPC], blockExplorerUrls: [EXPLORER_TESTNET],
         }]});
       }
     }
     await _onWalletConnected(window.ethereum);
-  } catch(e) {
-    if (e.code !== 4001) toast("error","MetaMask Error", e.message?.slice(0,60));
+  } catch (e) {
+    if (e.code !== 4001) toast("error", "MetaMask Error", e.message?.slice(0, 60));
   }
 }
 
-// ── WalletConnect via @walletconnect/ethereum-provider UMD ───────────────────
-// Uses a pre-built UMD bundle (no ESM / build step needed). Loaded on first
-// click so it doesn't slow down page startup. Supports 300+ mobile wallets via
-// QR code or deep-link. optionalChains + rpcMap tells WC about Somnia 50312.
+// ── WalletConnect ─────────────────────────────────────────────────────────────
+// Path A: Thirdweb's walletConnect adapter (uses WC v2 internally, shows QR).
+// Path B: Raw @walletconnect/ethereum-provider UMD — reliable fallback.
 async function connectWalletConnect() {
   closeWalletModal();
   toast("info", "WalletConnect", "Opening wallet selector…");
 
-  try {
-    // Load the WC EthereumProvider UMD once; reuse on subsequent clicks
-    if (!window.EthereumProvider) {
-      await _loadScript(
-        "https://unpkg.com/@walletconnect/ethereum-provider@2.17.0/dist/index.umd.js"
-      );
+  // ── Path A: Thirdweb ──
+  if (window._tw) {
+    try {
+      const { walletConnect, client, somniaChain } = window._tw;
+      const wallet  = walletConnect({ projectId: WC_PROJECT_ID });
+      const account = await wallet.connect({ client, chain: somniaChain });
+      _twWallet = wallet;
+      await _onThirdwebConnected(account.address, "WalletConnect");
+      return;
+    } catch (e) {
+      const m = e.message || "";
+      if (m.includes("User rejected") || m.includes("Modal closed") || m.includes("closed")) return;
+      console.warn("[WC] Thirdweb path failed, using UMD fallback:", m);
     }
-    if (!window.EthereumProvider) throw new Error("WalletConnect library failed to load");
+  }
 
-    // Disconnect any stale session before opening a new one
+  // ── Path B: WC EthereumProvider UMD ──
+  try {
+    if (!window.EthereumProvider) {
+      await _loadScript("https://unpkg.com/@walletconnect/ethereum-provider@2.17.0/dist/index.umd.js");
+    }
+    if (!window.EthereumProvider) throw new Error("WalletConnect library unavailable");
+
     if (_wcProvider) { try { await _wcProvider.disconnect(); } catch (_) {} _wcProvider = null; }
 
     const provider = await window.EthereumProvider.init({
-      projectId:      WC_PROJECT_ID,
-      // WC requires at least one CAIP-registered chain; Somnia goes in optionalChains
-      chains:         [1],
-      optionalChains: [50312],
-      showQrModal:    true,
-      qrModalOptions: { themeMode: "dark" },
+      projectId: WC_PROJECT_ID, chains: [1], optionalChains: [50312],
+      showQrModal: true, qrModalOptions: { themeMode: "dark" },
       metadata: {
-        name:        "AuraAgentic",
-        description: "Autonomous Agent Economy on Somnia Agentic L1",
-        url:         "https://aura-agentic.vercel.app",
-        icons:       ["https://aura-agentic.vercel.app/icon-512.png"],
+        name: "AuraAgentic", description: "Autonomous Agent Economy on Somnia Agentic L1",
+        url: "https://aura-agentic.vercel.app", icons: ["https://aura-agentic.vercel.app/icon-512.png"],
       },
-      rpcMap: {
-        1:     "https://cloudflare-eth.com", // fallback for mainnet requests
-        50312: SOMNIA_RPC,                   // Somnia RPC
-      },
+      rpcMap: { 1: "https://cloudflare-eth.com", 50312: SOMNIA_RPC },
     });
 
     await provider.connect();
     _wcProvider = provider;
 
-    // Switch wallet to Somnia 50312 after connecting
     try {
-      await provider.request({
-        method: "wallet_switchEthereumChain",
-        params: [{ chainId: SOMNIA_CHAIN_HEX }],
-      });
+      await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: SOMNIA_CHAIN_HEX }] });
     } catch (sw) {
-      // Chain not yet in wallet — add it first then switch
       if (sw.code === 4902 || sw.code === -32603) {
-        await provider.request({
-          method: "wallet_addEthereumChain",
-          params: [{
-            chainId:            SOMNIA_CHAIN_HEX,
-            chainName:          "Somnia Testnet",
-            nativeCurrency:     { name: "STT", symbol: "STT", decimals: 18 },
-            rpcUrls:            [SOMNIA_RPC],
-            blockExplorerUrls:  [EXPLORER_TESTNET],
-          }],
-        });
+        await provider.request({ method: "wallet_addEthereumChain", params: [{
+          chainId: SOMNIA_CHAIN_HEX, chainName: "Somnia Testnet",
+          nativeCurrency: { name: "STT", symbol: "STT", decimals: 18 },
+          rpcUrls: [SOMNIA_RPC], blockExplorerUrls: [EXPLORER_TESTNET],
+        }]});
       }
     }
 
-    // Handle remote-initiated disconnects (e.g. user disconnects from wallet app)
     provider.on("disconnect", () => {
       if (!state.wallet) return;
-      state.wallet = null; state.balance = "0";
-      _wcProvider = null;
+      state.wallet = null; state.balance = "0"; _wcProvider = null;
       setWalletDisconnected();
       const dot = document.getElementById("net-dot");
       if (dot) dot.classList.remove("connected");
@@ -1814,11 +1849,44 @@ async function connectWalletConnect() {
     });
 
     await _onWalletConnected(provider);
-
   } catch (e) {
     const msg = e.message || "";
     if (!msg.includes("User rejected") && !msg.includes("Modal closed") && !msg.includes("closed")) {
       toast("error", "WalletConnect Failed", msg.slice(0, 90));
+    }
+  }
+}
+
+// ── Google (Thirdweb inAppWallet) ─────────────────────────────────────────────
+// Creates an embedded MPC wallet tied to the user's Google account.
+// No MetaMask or any extension needed — works on any browser/device.
+// Requires: aura-agentic.vercel.app added to allowed domains in Thirdweb dashboard.
+async function connectGoogle() {
+  closeWalletModal();
+
+  if (!window._tw) {
+    toast("warn", "Not Ready", "Thirdweb SDK is still loading — please wait a moment and try again.");
+    return;
+  }
+
+  try {
+    const { inAppWallet, client, somniaChain } = window._tw;
+    toast("info", "Google Login", "Opening Google sign-in…");
+
+    const wallet  = inAppWallet({ auth: { options: ["google"] } });
+    const account = await wallet.connect({
+      client,
+      strategy: "google",  // opens a Google OAuth popup
+      chain:    somniaChain,
+    });
+
+    _twWallet = wallet;
+    await _onThirdwebConnected(account.address, "Google");
+  } catch (e) {
+    const msg = e.message || "";
+    // Silently ignore popup-closed / user-cancelled events
+    if (!msg.includes("popup") && !msg.includes("closed") && !msg.includes("User rejected") && !msg.includes("cancel")) {
+      toast("error", "Google Login Failed", msg.slice(0, 80));
     }
   }
 }
@@ -2794,8 +2862,9 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Wallet modal — provider options
-  document.getElementById("wopt-metamask").addEventListener("click", connectMetaMask);
   document.getElementById("wopt-wc").addEventListener("click", connectWalletConnect);
+  document.getElementById("wopt-google").addEventListener("click", connectGoogle);
+  document.getElementById("wopt-metamask").addEventListener("click", connectMetaMask);
 
   // Disconnect button
   document.getElementById("disconnect-btn").addEventListener("click", disconnectWallet);
