@@ -298,20 +298,18 @@
     </div>
 
     <div class="wallet-options">
-      <!-- Reown AppKit — all wallets -->
-      <button class="wallet-option" id="wopt-wc" style="border-color:rgba(108,99,255,0.4)">
-        <div class="wopt-icon-wrap wopt-wc" style="background:rgba(108,99,255,0.15)">
-          <!-- Reown logo mark -->
+      <!-- WalletConnect — QR / mobile wallets -->
+      <button class="wallet-option" id="wopt-wc" style="border-color:rgba(51,150,255,0.4)">
+        <div class="wopt-icon-wrap wopt-wc" style="background:rgba(51,150,255,0.12)">
+          <!-- WalletConnect logo -->
           <svg viewBox="0 0 40 40" width="28" height="28" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect width="40" height="40" rx="10" fill="#6c63ff" opacity="0.15"/>
-            <path d="M20 8C13.373 8 8 13.373 8 20s5.373 12 12 12 12-5.373 12-12S26.627 8 20 8z" stroke="#6c63ff" stroke-width="2" fill="none"/>
-            <path d="M14 20c0-3.314 2.686-6 6-6s6 2.686 6 6-2.686 6-6 6" stroke="#00d4ff" stroke-width="2.5" stroke-linecap="round" fill="none"/>
-            <circle cx="20" cy="20" r="2.5" fill="#6c63ff"/>
+            <rect width="40" height="40" rx="10" fill="#3396FF" opacity="0.15"/>
+            <path d="M11.8 17.2c4.5-4.4 11.9-4.4 16.4 0l.5.5c.2.2.2.5 0 .7l-1.9 1.9c-.1.1-.3.1-.4 0l-.7-.7c-3.1-3-8.2-3-11.4 0l-.8.7c-.1.1-.3.1-.4 0l-1.9-1.9c-.2-.2-.2-.5 0-.7l.6-.5zm20.3 3.8 1.7 1.7c.2.2.2.5 0 .7l-7.6 7.5c-.2.2-.5.2-.7 0l-5.4-5.3c-.1 0-.2 0-.3 0l-5.4 5.3c-.2.2-.5.2-.7 0L6.2 23.4c-.2-.2-.2-.5 0-.7l1.7-1.7c.2-.2.5-.2.7 0l5.4 5.3c.1 0 .2 0 .3 0l5.4-5.3c.2-.2.5-.2.7 0l5.4 5.3c.1 0 .2 0 .3 0l5.4-5.3c.2-.2.5-.2.7 0z" fill="#3396FF"/>
           </svg>
         </div>
         <div class="wopt-info">
-          <span class="wopt-name" style="background:linear-gradient(90deg,#00d4ff,#6c63ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">Reown — All Wallets</span>
-          <span class="wopt-desc">MetaMask · Coinbase · Rainbow · 400+ wallets</span>
+          <span class="wopt-name" style="background:linear-gradient(90deg,#3396FF,#6c63ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">WalletConnect</span>
+          <span class="wopt-desc">Scan QR · MetaMask Mobile · Trust · Rainbow · 300+</span>
         </div>
         <svg class="wopt-arrow" viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
       </button>
@@ -363,103 +361,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.0/ethers.umd.min.js"></script>
 <script src="app.js"></script>
 
-<!-- ── Reown AppKit — loaded as an ES module (deferred, non-blocking) ────────
-     Loads from esm.sh with jsdelivr as CDN fallback.
-     Dispatches "appkit-ready" or "appkit-failed" so app.js can react.
-     subscribeProvider stores the live EIP-1193 provider globally so
-     app.js can switch the wallet to Somnia 50312 after connect.
-     ─────────────────────────────────────────────────────────────────────── -->
-<script type="module">
-  const REOWN_PROJECT_ID = "5b3287538b8b8f55ba08cdd88b84e54c";
-
-  const somniaTestnet = {
-    id: 50312,
-    name: "Somnia Testnet",
-    nativeCurrency: { name: "STT", symbol: "STT", decimals: 18 },
-    rpcUrls: { default: { http: ["https://api.infra.testnet.somnia.network"] } },
-    blockExplorers: { default: { name: "Shannon Explorer", url: "https://shannon-explorer.somnia.network" } },
-    testnet: true,
-  };
-
-  // Try loading from a CDN; returns { createAppKit, EthersAdapter } or throws
-  async function tryLoad(appkitUrl, adapterUrl) {
-    const [{ createAppKit }, { EthersAdapter }] = await Promise.all([
-      import(appkitUrl),
-      import(adapterUrl),
-    ]);
-    return { createAppKit, EthersAdapter };
-  }
-
-  try {
-    let loaded;
-    try {
-      // Primary CDN — esm.sh (converts npm packages to ESM on the fly)
-      loaded = await tryLoad(
-        "https://esm.sh/@reown/appkit@1.6.8",
-        "https://esm.sh/@reown/appkit-adapter-ethers@1.6.8"
-      );
-    } catch (e1) {
-      console.warn("[AppKit] esm.sh failed, trying jsdelivr:", e1.message);
-      // Fallback CDN — jsDelivr +esm mode
-      loaded = await tryLoad(
-        "https://cdn.jsdelivr.net/npm/@reown/appkit@1.6.8/+esm",
-        "https://cdn.jsdelivr.net/npm/@reown/appkit-adapter-ethers@1.6.8/+esm"
-      );
-    }
-
-    const { createAppKit, EthersAdapter } = loaded;
-
-    window.appkitModal = createAppKit({
-      adapters:       [new EthersAdapter()],
-      networks:       [somniaTestnet],
-      defaultNetwork: somniaTestnet,
-      projectId:      REOWN_PROJECT_ID,
-      themeMode:      "dark",
-      metadata: {
-        name:        "AuraAgentic",
-        description: "Autonomous Agent Economy on Somnia Agentic L1",
-        url:         "https://aura-agentic.vercel.app",
-        icons:       ["https://aura-agentic.vercel.app/icon-512.png"],
-      },
-      themeVariables: {
-        "--w3m-accent":               "#6c63ff",
-        "--w3m-color-mix":            "#6c63ff",
-        "--w3m-color-mix-strength":    15,
-        "--w3m-border-radius-master": "8px",
-      },
-      features: {
-        analytics: false,
-        email:     false,
-        socials:   false,
-        onramp:    false,
-        swaps:     false,
-      },
-    });
-
-    // Store the live EIP-1193 provider so app.js can switch chain / sign txs
-    window.appkitModal.subscribeProvider(({ provider, isConnected }) => {
-      window._reownProvider = isConnected ? provider : null;
-    });
-
-    // Sync account state → AuraAgentic app
-    window.appkitModal.subscribeAccount(({ address, isConnected }) => {
-      if (isConnected && address) {
-        if (typeof window._reownOnConnect === "function") window._reownOnConnect(address);
-      } else {
-        if (typeof window._reownOnDisconnect === "function") window._reownOnDisconnect();
-      }
-    });
-
-    // Tell app.js AppKit is ready (resolves any pending showWalletModal calls)
-    document.dispatchEvent(new CustomEvent("appkit-ready"));
-    console.log("[AuraAgentic] Reown AppKit ready ✓");
-
-  } catch (err) {
-    // Tell app.js to fall back to custom modal
-    document.dispatchEvent(new CustomEvent("appkit-failed"));
-    console.warn("[AuraAgentic] Reown AppKit load failed:", err.message);
-  }
-</script>
+<!-- WalletConnect EthereumProvider is loaded on-demand in app.js
+     (connectWalletConnect uses _loadScript to fetch the UMD bundle only
+      when the user actually clicks WalletConnect, keeping startup fast) -->
 <script>
   // ── Splash dismiss ──────────────────────────────────────────────────────────
   (function() {

@@ -1616,108 +1616,14 @@ function updateBadges() {
 }
 
 // ── Wallet ─────────────────────────────────────────────────────────────────────
-const WC_PROJECT_ID = "5b3287538b8b8f55ba08cdd88b84e54c";
+const WC_PROJECT_ID    = "5b3287538b8b8f55ba08cdd88b84e54c";
 const SOMNIA_CHAIN_HEX = "0xC488"; // 50312 in hex
 
-// Track whether AppKit has finished loading (set by events from index.html)
-let _appkitState = "loading"; // "loading" | "ready" | "failed"
-document.addEventListener("appkit-ready",  () => { _appkitState = "ready";  });
-document.addEventListener("appkit-failed", () => { _appkitState = "failed"; });
-
-// ── Reown AppKit — connect handler ────────────────────────────────────────────
-// Called by the <script type="module"> in index.html via subscribeAccount.
-window._reownOnConnect = async function(address) {
-  // Ignore duplicate fires (AppKit can fire on init if a session was cached)
-  if (state.wallet === address) return;
-  state.wallet = address;
-
-  // Switch the connected wallet to Somnia 50312 if it's on a different chain
-  if (window._reownProvider) {
-    try {
-      const chainHex = await window._reownProvider.request({ method: "eth_chainId" });
-      if (parseInt(chainHex, 16) !== 50312) {
-        try {
-          await window._reownProvider.request({
-            method: "wallet_switchEthereumChain",
-            params: [{ chainId: SOMNIA_CHAIN_HEX }],
-          });
-        } catch (sw) {
-          // Chain not yet added to wallet — add it first
-          if (sw.code === 4902 || sw.code === -32603) {
-            await window._reownProvider.request({
-              method: "wallet_addEthereumChain",
-              params: [{
-                chainId:     SOMNIA_CHAIN_HEX,
-                chainName:   "Somnia Testnet",
-                nativeCurrency: { name: "STT", symbol: "STT", decimals: 18 },
-                rpcUrls:     ["https://api.infra.testnet.somnia.network"],
-                blockExplorerUrls: ["https://shannon-explorer.somnia.network"],
-              }],
-            });
-          }
-        }
-      }
-    } catch (_) { /* non-fatal — balance read below still uses public RPC */ }
-  }
-
-  // Fetch STT balance via public RPC (works even if provider chain switch failed)
-  try {
-    const rpc = new ethers.JsonRpcProvider(SOMNIA_RPC);
-    const bal = await rpc.getBalance(address);
-    state.balance = parseFloat(ethers.formatEther(bal)).toFixed(4);
-  } catch { state.balance = "0"; }
-
-  setWalletConnected(address);
-  const dot = document.getElementById("net-dot");
-  if (dot) dot.classList.add("connected");
-  const lbl = document.getElementById("net-label");
-  if (lbl) lbl.textContent = "Somnia Testnet";
-  toast("success", "Wallet Connected", `${address.slice(0,10)}… · ${state.balance} STT`);
-  addEvent("success", "🔗", "Wallet connected", `${address.slice(0,10)}… via Reown`);
-  loadChainData();
-};
-
-window._reownOnDisconnect = function() {
-  if (!state.wallet) return;
-  state.wallet = null; state.balance = "0";
-  setWalletDisconnected();
-  const dot = document.getElementById("net-dot");
-  if (dot) dot.classList.remove("connected");
-  const lbl = document.getElementById("net-label");
-  if (lbl) lbl.textContent = "Demo Mode";
-  toast("info", "Wallet Disconnected", "Disconnected from Somnia Testnet");
-  addEvent("info", "🔌", "Wallet disconnected", "");
-};
+// Holds the active WalletConnect EthereumProvider so we can disconnect it
+let _wcProvider = null;
 
 // ── Wallet modal ──────────────────────────────────────────────────────────────
 function showWalletModal() {
-  // AppKit ready → open its modal immediately
-  if (window.appkitModal) {
-    window.appkitModal.open();
-    return;
-  }
-  // AppKit still loading → wait up to 6 s then open, or fall back
-  if (_appkitState === "loading") {
-    toast("info", "Connecting…", "Wallet connector loading, please wait");
-    const onReady = () => {
-      document.removeEventListener("appkit-ready",  onReady);
-      document.removeEventListener("appkit-failed", onFail);
-      if (window.appkitModal) window.appkitModal.open();
-    };
-    const onFail = () => {
-      document.removeEventListener("appkit-ready",  onReady);
-      document.removeEventListener("appkit-failed", onFail);
-      // Show fallback custom modal
-      const ov = document.getElementById("wallet-modal-overlay");
-      if (ov) ov.classList.remove("hidden");
-    };
-    document.addEventListener("appkit-ready",  onReady);
-    document.addEventListener("appkit-failed", onFail);
-    // Safety timeout — if neither event fires in 6 s, show fallback
-    setTimeout(() => { onFail(); }, 6000);
-    return;
-  }
-  // AppKit definitively failed → show fallback modal
   const overlay = document.getElementById("wallet-modal-overlay");
   if (overlay) overlay.classList.remove("hidden");
 }
@@ -1763,9 +1669,10 @@ function setWalletDisconnected() {
 }
 
 function disconnectWallet() {
-  // Disconnect Reown AppKit session if active
-  if (window.appkitModal) {
-    try { window.appkitModal.disconnect(); } catch(_) {}
+  // Disconnect WalletConnect session if active
+  if (_wcProvider) {
+    try { _wcProvider.disconnect(); } catch (_) {}
+    _wcProvider = null;
   }
   state.wallet = null;
   state.balance = "0";
@@ -1829,34 +1736,31 @@ async function connectMetaMask() {
   }
 }
 
-// ── WalletConnect (fallback — only reached if Reown AppKit failed to load) ────
-// Tries to open AppKit first; if truly unavailable uses the WC EthereumProvider
-// directly. We target the latest 2.x release which supports custom chains via rpcMap.
+// ── WalletConnect via @walletconnect/ethereum-provider UMD ───────────────────
+// Uses a pre-built UMD bundle (no ESM / build step needed). Loaded on first
+// click so it doesn't slow down page startup. Supports 300+ mobile wallets via
+// QR code or deep-link. optionalChains + rpcMap tells WC about Somnia 50312.
 async function connectWalletConnect() {
-  // If AppKit loaded after the modal opened, hand off to it
-  if (window.appkitModal) {
-    closeWalletModal();
-    window.appkitModal.open();
-    return;
-  }
-
   closeWalletModal();
-  toast("info", "WalletConnect", "Loading QR modal…");
+  toast("info", "WalletConnect", "Opening wallet selector…");
 
   try {
-    // Load the standalone WalletConnect EthereumProvider (no AppKit required)
+    // Load the WC EthereumProvider UMD once; reuse on subsequent clicks
     if (!window.EthereumProvider) {
       await _loadScript(
         "https://unpkg.com/@walletconnect/ethereum-provider@2.17.0/dist/index.umd.js"
       );
     }
-    if (!window.EthereumProvider) throw new Error("WalletConnect library unavailable");
+    if (!window.EthereumProvider) throw new Error("WalletConnect library failed to load");
+
+    // Disconnect any stale session before opening a new one
+    if (_wcProvider) { try { await _wcProvider.disconnect(); } catch (_) {} _wcProvider = null; }
 
     const provider = await window.EthereumProvider.init({
-      projectId: WC_PROJECT_ID,
-      // optionalChains: tell WC the dapp works on Somnia; wallets can accept or reject
-      chains:         [1],          // required: at least one "standard" chain
-      optionalChains: [50312],      // Somnia — wallets that support it will connect
+      projectId:      WC_PROJECT_ID,
+      // WC requires at least one CAIP-registered chain; Somnia goes in optionalChains
+      chains:         [1],
+      optionalChains: [50312],
       showQrModal:    true,
       qrModalOptions: { themeMode: "dark" },
       metadata: {
@@ -1866,36 +1770,55 @@ async function connectWalletConnect() {
         icons:       ["https://aura-agentic.vercel.app/icon-512.png"],
       },
       rpcMap: {
-        1:     "https://cloudflare-eth.com",
-        50312: SOMNIA_RPC,
+        1:     "https://cloudflare-eth.com", // fallback for mainnet requests
+        50312: SOMNIA_RPC,                   // Somnia RPC
       },
     });
 
     await provider.connect();
+    _wcProvider = provider;
 
-    // After WC connects, switch to Somnia 50312
+    // Switch wallet to Somnia 50312 after connecting
     try {
-      await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: SOMNIA_CHAIN_HEX }] });
+      await provider.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: SOMNIA_CHAIN_HEX }],
+      });
     } catch (sw) {
+      // Chain not yet in wallet — add it first then switch
       if (sw.code === 4902 || sw.code === -32603) {
         await provider.request({
           method: "wallet_addEthereumChain",
           params: [{
-            chainId:   SOMNIA_CHAIN_HEX,
-            chainName: "Somnia Testnet",
-            nativeCurrency: { name: "STT", symbol: "STT", decimals: 18 },
-            rpcUrls:   [SOMNIA_RPC],
-            blockExplorerUrls: [EXPLORER_TESTNET],
+            chainId:            SOMNIA_CHAIN_HEX,
+            chainName:          "Somnia Testnet",
+            nativeCurrency:     { name: "STT", symbol: "STT", decimals: 18 },
+            rpcUrls:            [SOMNIA_RPC],
+            blockExplorerUrls:  [EXPLORER_TESTNET],
           }],
         });
       }
     }
 
+    // Handle remote-initiated disconnects (e.g. user disconnects from wallet app)
+    provider.on("disconnect", () => {
+      if (!state.wallet) return;
+      state.wallet = null; state.balance = "0";
+      _wcProvider = null;
+      setWalletDisconnected();
+      const dot = document.getElementById("net-dot");
+      if (dot) dot.classList.remove("connected");
+      const lbl = document.getElementById("net-label");
+      if (lbl) lbl.textContent = "Demo Mode";
+      toast("info", "Wallet Disconnected", "WalletConnect session ended");
+    });
+
     await _onWalletConnected(provider);
+
   } catch (e) {
     const msg = e.message || "";
-    if (!msg.includes("User rejected") && !msg.includes("closed") && !msg.includes("Modal closed")) {
-      toast("error", "WalletConnect Failed", msg.slice(0, 80));
+    if (!msg.includes("User rejected") && !msg.includes("Modal closed") && !msg.includes("closed")) {
+      toast("error", "WalletConnect Failed", msg.slice(0, 90));
     }
   }
 }
