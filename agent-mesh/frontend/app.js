@@ -1823,7 +1823,10 @@ async function connectWalletConnect() {
   }
 
   // Load WalletConnect EthereumProvider
-  if (!window.EthereumProvider) {
+  // The UMD bundle sets  window["@walletconnect/ethereum-provider"].EthereumProvider
+  // (NOT window.EthereumProvider — that was the bug causing "library not initialised")
+  const _wcPkg = () => window["@walletconnect/ethereum-provider"];
+  if (!_wcPkg()?.EthereumProvider) {
     try {
       await _loadScript("https://unpkg.com/@walletconnect/ethereum-provider@2.17.0/dist/index.umd.js");
     } catch (_) {
@@ -1836,8 +1839,10 @@ async function connectWalletConnect() {
     }
   }
 
-  if (typeof window.EthereumProvider?.init !== "function") {
-    toast("error", "WalletConnect", "Library did not initialise correctly. Please refresh and try again.");
+  const EthereumProvider = _wcPkg()?.EthereumProvider;
+  if (typeof EthereumProvider?.init !== "function") {
+    toast("error", "WalletConnect", "WalletConnect library failed to load. Please refresh and try again.");
+    console.error("[WC] window[\"@walletconnect/ethereum-provider\"]:", _wcPkg());
     return;
   }
 
@@ -1848,7 +1853,7 @@ async function connectWalletConnect() {
   }
 
   try {
-    const provider = await window.EthereumProvider.init({
+    const provider = await EthereumProvider.init({
       projectId:      WC_PROJECT_ID,
       chains:         [1],      // ETH mainnet is the required chain (well-known to all wallets)
       optionalChains: [50312],  // Somnia added as optional — wallet will switch after connect
