@@ -388,6 +388,153 @@ body {
 }
 .disconnect-btn:hover { background: rgba(239,68,68,0.22); border-color: rgba(239,68,68,0.5); }
 
+/* ══════════════════════════════════════════════════════════════════════
+   Wallet modals  (selection + WalletConnect QR/deep-link)
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* shared overlay */
+.wm-overlay {
+  position: fixed; inset: 0; z-index: 2000;
+  background: rgba(0,0,0,0.72);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center;
+  animation: wm-fade .15s ease;
+}
+.wm-overlay.hidden { display: none; }
+@keyframes wm-fade { from { opacity:0; } to { opacity:1; } }
+
+/* shared card */
+.wm-card {
+  background: var(--bg3);
+  border: 1px solid var(--border2);
+  border-radius: var(--r-xl);
+  padding: 32px 26px 24px;
+  width: 340px; max-width: calc(100vw - 28px);
+  position: relative;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.6), 0 0 40px rgba(108,99,255,0.07);
+  animation: wm-up .18s ease;
+}
+@keyframes wm-up {
+  from { transform: translateY(14px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+.wm-close {
+  position: absolute; top: 13px; right: 13px;
+  background: var(--bg4); border: 1px solid var(--border);
+  border-radius: 50%; width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--t2); cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.wm-close:hover { background: var(--border); color: var(--t1); }
+
+/* header */
+.wm-header { text-align: center; margin-bottom: 22px; }
+.wm-icon {
+  width: 48px; height: 48px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--indigo), var(--purple));
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 11px;
+  box-shadow: 0 0 22px rgba(108,99,255,0.3);
+  color: #fff;
+}
+.wm-icon-wc { background: rgba(51,150,255,0.15); }
+.wm-title {
+  font-family: var(--font-sans); font-size: 1.1rem; font-weight: 600;
+  color: var(--t1); letter-spacing: .05em; text-transform: uppercase;
+  margin-bottom: 3px;
+}
+.wm-sub { font-family: var(--font-sans); font-size: .74rem; color: var(--t2); }
+
+/* option buttons */
+.wm-options { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+.wm-opt {
+  display: flex; align-items: center; gap: 13px;
+  background: var(--bg4); border: 1px solid var(--border);
+  border-radius: var(--r-md); padding: 13px 15px;
+  cursor: pointer; text-align: left; color: var(--t1);
+  transition: border-color .15s, background .15s, transform .1s;
+}
+.wm-opt:hover {
+  border-color: var(--indigo); background: rgba(108,99,255,0.08);
+  transform: translateX(3px);
+}
+.wm-opt-icon {
+  width: 42px; height: 42px; border-radius: 11px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.wm-opt-mm { background: rgba(226,118,37,0.14); }
+.wm-opt-wc { background: rgba(51,150,255,0.12); }
+.wm-opt-info { flex: 1; }
+.wm-opt-name {
+  display: block; font-family: var(--font-sans); font-size: .88rem;
+  font-weight: 600; color: var(--t1); text-transform: uppercase;
+  letter-spacing: .04em; margin-bottom: 2px;
+}
+.wm-opt-desc { display: block; font-family: var(--font-sans); font-size: .69rem; color: var(--t2); }
+.wm-opt-arrow { color: var(--t3); flex-shrink: 0; transition: color .15s; }
+.wm-opt:hover .wm-opt-arrow { color: var(--indigo); }
+
+/* footer chain pill */
+.wm-footer { text-align: center; }
+.wm-chain-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: rgba(34,197,94,0.08); border: 1px solid rgba(34,197,94,0.2);
+  border-radius: 99px; padding: 4px 12px;
+  font-family: var(--font-mono); font-size: .67rem; color: var(--green);
+}
+.wm-chain-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--green); box-shadow: 0 0 5px rgba(34,197,94,.7);
+}
+
+/* ── WalletConnect QR card extras ──────────────────────────────────── */
+.wc-card { max-width: 360px; }
+
+.wc-qr-wrap {
+  background: #fff; border-radius: 12px; padding: 12px;
+  display: flex; align-items: center; justify-content: center;
+  min-height: 244px; margin-bottom: 16px;
+}
+.wc-qr-wrap canvas, .wc-qr-wrap img { display: block; border-radius: 4px; }
+
+.wc-spinner {
+  width: 34px; height: 34px;
+  border: 3px solid rgba(108,99,255,0.18); border-top-color: var(--indigo);
+  border-radius: 50%; animation: wc-spin .75s linear infinite;
+}
+@keyframes wc-spin { to { transform: rotate(360deg); } }
+
+/* mobile deep-links */
+.wc-mobile-links { margin-bottom: 16px; }
+.wc-mobile-hint {
+  font-size: .76rem; color: var(--t2); text-align: center;
+  margin: 0 0 10px; font-family: var(--font-sans);
+}
+.wc-deeplinks { display: flex; flex-direction: column; gap: 8px; }
+.wc-deeplink {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 15px;
+  background: var(--bg4); border: 1px solid var(--border2);
+  border-radius: 10px; color: var(--t1);
+  text-decoration: none; font-size: .84rem; font-family: var(--font-sans);
+  transition: background .15s, border-color .15s;
+}
+.wc-deeplink:hover { background: rgba(108,99,255,0.09); border-color: var(--indigo); }
+
+.wc-actions { display: flex; justify-content: center; margin-bottom: 18px; }
+.wc-copy-btn {
+  background: transparent; border: 1px solid var(--border2);
+  border-radius: 8px; padding: 7px 18px;
+  color: var(--t2); font-size: .73rem; font-family: var(--font-mono);
+  cursor: pointer; letter-spacing: .4px;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.wc-copy-btn:hover { background: rgba(108,99,255,0.08); border-color: var(--indigo); color: var(--t1); }
+
+.wc-hidden { display: none !important; }
+
 
 /* ── Content ───────────────────────────────────────────────────────────── */
 .content {

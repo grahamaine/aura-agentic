@@ -1617,8 +1617,86 @@ function updateBadges() {
 
 // ── Wallet ─────────────────────────────────────────────────────────────────────
 const SOMNIA_CHAIN_HEX = "0xC488"; // 50312
+const WC_PROJECT_ID    = "5b3287538b8b8f55ba08cdd88b84e54c";
+const SITE_URL         = "https://aura-agentic.vercel.app";
 
-// ── Post-connect UI ───────────────────────────────────────────────────────────
+let _wcProvider  = null;  // active WC EthereumProvider
+let _wcCurrentUri = null; // current WC URI for copy button
+
+// ── Wallet selection modal ────────────────────────────────────────────────────
+function showWalletModal() {
+  document.getElementById("wallet-modal-overlay")?.classList.remove("hidden");
+}
+function closeWalletModal() {
+  document.getElementById("wallet-modal-overlay")?.classList.add("hidden");
+}
+
+// ── WalletConnect QR / deep-link modal ───────────────────────────────────────
+function _showWCModal(uri) {
+  _wcCurrentUri = uri;
+  const overlay = document.getElementById("wc-modal-overlay");
+  if (!overlay) return;
+
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  const qrWrap      = document.getElementById("wc-qr-wrap");
+  const mobileLinks = document.getElementById("wc-mobile-links");
+  const subtitle    = document.getElementById("wc-modal-subtitle");
+
+  if (isMobile) {
+    qrWrap?.classList.add("wc-hidden");
+    mobileLinks?.classList.remove("wc-hidden");
+    if (subtitle) subtitle.textContent = "Open your wallet to connect:";
+    const enc = encodeURIComponent(uri);
+    const links = {
+      "wc-link-metamask":  `metamask://wc?uri=${enc}`,
+      "wc-link-trust":     `trust://wc?uri=${enc}`,
+      "wc-link-rainbow":   `rainbow://wc?uri=${enc}`,
+      "wc-link-coinbase":  `cbwallet://wc?uri=${enc}`,
+    };
+    Object.entries(links).forEach(([id, href]) => {
+      const el = document.getElementById(id);
+      if (el) el.href = href;
+    });
+  } else {
+    mobileLinks?.classList.add("wc-hidden");
+    qrWrap?.classList.remove("wc-hidden");
+    if (subtitle) subtitle.textContent = "Scan with MetaMask Mobile, Trust, Rainbow or any WC wallet";
+
+    const spinner   = document.getElementById("wc-spinner");
+    const container = document.getElementById("wc-qr-container");
+    if (spinner)   spinner.style.display = "none";
+    if (container) {
+      container.innerHTML = "";
+      if (window.QRCode) {
+        try {
+          new window.QRCode(container, {
+            text: uri, width: 220, height: 220,
+            colorDark: "#000000", colorLight: "#ffffff",
+            correctLevel: window.QRCode.CorrectLevel.M,
+          });
+        } catch (_) {
+          container.innerHTML = `<p style="word-break:break-all;font-size:9px;color:#555;max-width:220px;padding:8px">${uri}</p>`;
+        }
+      } else {
+        container.innerHTML = `<p style="word-break:break-all;font-size:9px;color:#555;max-width:220px;padding:8px">${uri}</p>`;
+      }
+    }
+  }
+  overlay.classList.remove("hidden");
+}
+
+function _closeWCModal() {
+  document.getElementById("wc-modal-overlay")?.classList.add("hidden");
+  _wcCurrentUri = null;
+  const spinner   = document.getElementById("wc-spinner");
+  const container = document.getElementById("wc-qr-container");
+  const subtitle  = document.getElementById("wc-modal-subtitle");
+  if (spinner)   spinner.style.display = "";
+  if (container) container.innerHTML   = "";
+  if (subtitle)  subtitle.textContent  = "Connecting…";
+}
+
+// ── Shared post-connect handler ───────────────────────────────────────────────
 async function _finishConnect(address, balanceProvider) {
   state.wallet = address;
   try {
@@ -1626,7 +1704,6 @@ async function _finishConnect(address, balanceProvider) {
     state.balance = parseFloat(ethers.formatEther(bal)).toFixed(4);
   } catch { state.balance = "0"; }
 
-  // Show wallet pill, hide connect button, show disconnect
   document.getElementById("wallet-btn")?.classList.add("hidden");
   document.getElementById("disconnect-btn")?.classList.remove("hidden");
   const info = document.getElementById("wallet-info");
@@ -1648,7 +1725,6 @@ async function _finishConnect(address, balanceProvider) {
 }
 
 function setWalletConnected(address) {
-  // kept for any legacy callers in the codebase
   document.getElementById("wallet-btn")?.classList.add("hidden");
   document.getElementById("disconnect-btn")?.classList.remove("hidden");
   const info = document.getElementById("wallet-info");
@@ -1668,6 +1744,10 @@ function setWalletDisconnected() {
 }
 
 function disconnectWallet() {
+  if (_wcProvider) {
+    try { _wcProvider.disconnect(); } catch (_) {}
+    _wcProvider = null;
+  }
   state.wallet  = null;
   state.balance = "0";
   setWalletDisconnected();
@@ -1679,16 +1759,23 @@ function disconnectWallet() {
   addEvent("info", "🔌", "Wallet disconnected", "");
 }
 
-// ── MetaMask — window.ethereum (only wallet provider) ────────────────────────
+// ── MetaMask ──────────────────────────────────────────────────────────────────
 async function connectMetaMask() {
+  closeWalletModal();
+
+  // Mobile Chrome: no extension — open site inside MetaMask Mobile's browser
   if (!window.ethereum) {
-    toast("warn", "MetaMask Required", "Install MetaMask extension, or open this site inside MetaMask Mobile.");
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    if (isMobile) {
+      window.location.href = `https://metamask.app.link/dapp/${SITE_URL.replace(/^https?:\/\//, "")}`;
+    } else {
+      toast("warn", "MetaMask Not Found", "Install the MetaMask extension for your browser.");
+    }
     return;
   }
+
   try {
     await window.ethereum.request({ method: "eth_requestAccounts" });
-
-    // Switch to / add Somnia Testnet
     try {
       await window.ethereum.request({
         method: "wallet_switchEthereumChain",
@@ -1708,14 +1795,113 @@ async function connectMetaMask() {
         });
       }
     }
-
-    const ethersProvider = new ethers.BrowserProvider(window.ethereum);
-    const accounts       = await ethersProvider.listAccounts();
-    const address        = accounts[0]?.address ?? accounts[0];
-    await _finishConnect(address, ethersProvider);
+    const prov     = new ethers.BrowserProvider(window.ethereum);
+    const accounts = await prov.listAccounts();
+    await _finishConnect(accounts[0]?.address ?? accounts[0], prov);
   } catch (e) {
     if (e.code !== 4001) toast("error", "MetaMask Error", e.message?.slice(0, 80));
   }
+}
+
+// ── WalletConnect ─────────────────────────────────────────────────────────────
+// Uses @walletconnect/ethereum-provider UMD.
+// IMPORTANT: the UMD sets window["@walletconnect/ethereum-provider"].EthereumProvider
+// (NOT window.EthereumProvider — that was the earlier bug).
+async function connectWalletConnect() {
+  closeWalletModal();
+  toast("info", "WalletConnect", "Loading…");
+
+  // 1. QRCode.js
+  if (!window.QRCode) {
+    try { await _loadScript("https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"); }
+    catch (_) { try { await _loadScript("https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"); } catch (_2) {} }
+  }
+
+  // 2. WalletConnect EthereumProvider UMD
+  const _pkg = () => window["@walletconnect/ethereum-provider"];
+  if (!_pkg()?.EthereumProvider) {
+    try { await _loadScript("https://unpkg.com/@walletconnect/ethereum-provider@2.17.0/dist/index.umd.js"); }
+    catch (_) {
+      try { await _loadScript("https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.17.0/dist/index.umd.js"); }
+      catch (e2) { toast("error", "WalletConnect", "Failed to load. Check your connection."); return; }
+    }
+  }
+
+  const EthereumProvider = _pkg()?.EthereumProvider;
+  if (typeof EthereumProvider?.init !== "function") {
+    toast("error", "WalletConnect", "Library failed to initialise. Please refresh and try again.");
+    return;
+  }
+
+  // Clean up any stale session
+  if (_wcProvider) { try { await _wcProvider.disconnect(); } catch (_) {} _wcProvider = null; }
+
+  try {
+    const provider = await EthereumProvider.init({
+      projectId:      WC_PROJECT_ID,
+      chains:         [1],
+      optionalChains: [50312],
+      showQrModal:    false,   // we show our own modal — avoids broken internal dynamic import
+      metadata: {
+        name: "AuraAgentic", description: "Autonomous Agent Economy on Somnia Agentic L1",
+        url: SITE_URL, icons: [`${SITE_URL}/icon-512.png`],
+      },
+      rpcMap: { 1: "https://cloudflare-eth.com", 50312: SOMNIA_RPC },
+    });
+
+    provider.on("display_uri", (uri) => _showWCModal(uri));
+    provider.on("connect",     ()    => _closeWCModal());
+    provider.on("disconnect",  ()    => {
+      if (!state.wallet) return;
+      _closeWCModal();
+      state.wallet = null; state.balance = "0"; _wcProvider = null;
+      setWalletDisconnected();
+      const dot = document.getElementById("net-dot");
+      if (dot) dot.classList.remove("connected");
+      const lbl = document.getElementById("net-label");
+      if (lbl) lbl.textContent = "Demo Mode";
+      toast("info", "Wallet Disconnected", "WalletConnect session ended");
+    });
+
+    await provider.connect();
+    _wcProvider = provider;
+
+    // Switch to Somnia Testnet
+    try {
+      await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: SOMNIA_CHAIN_HEX }] });
+    } catch (sw) {
+      if (sw.code === 4902 || sw.code === -32603) {
+        await provider.request({ method: "wallet_addEthereumChain", params: [{
+          chainId: SOMNIA_CHAIN_HEX, chainName: "Somnia Testnet",
+          nativeCurrency: { name: "STT", symbol: "STT", decimals: 18 },
+          rpcUrls: [SOMNIA_RPC], blockExplorerUrls: [EXPLORER_TESTNET],
+        }] });
+      }
+    }
+
+    const prov     = new ethers.BrowserProvider(provider);
+    const accounts = await prov.listAccounts();
+    await _finishConnect(accounts[0]?.address ?? accounts[0], prov);
+
+  } catch (e) {
+    _closeWCModal();
+    const msg = e.message || "";
+    if (!msg.includes("User rejected") && !msg.includes("Modal closed") &&
+        !msg.includes("closed") && !msg.includes("cancel")) {
+      toast("error", "WalletConnect Failed", msg.slice(0, 90));
+    }
+  }
+}
+
+// ── Script loader ─────────────────────────────────────────────────────────────
+function _loadScript(src) {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
+    const s = document.createElement("script");
+    s.src = src; s.onload = resolve;
+    s.onerror = () => reject(new Error(`Failed to load ${src}`));
+    document.head.appendChild(s);
+  });
 }
 
 
@@ -2670,10 +2856,40 @@ document.addEventListener("DOMContentLoaded", () => {
     btn.addEventListener("click", () => navigate(btn.dataset.view));
   });
 
-  // Wallet — connect button directly triggers MetaMask
-  document.getElementById("wallet-btn").addEventListener("click", connectMetaMask);
+  // Connect button → open wallet selection modal
+  document.getElementById("wallet-btn").addEventListener("click", showWalletModal);
 
-  // Disconnect button
+  // Wallet selection modal — close
+  document.getElementById("wallet-modal-close").addEventListener("click", closeWalletModal);
+  document.getElementById("wallet-modal-overlay").addEventListener("click", e => {
+    if (e.target === document.getElementById("wallet-modal-overlay")) closeWalletModal();
+  });
+
+  // Wallet selection modal — options
+  document.getElementById("wopt-metamask").addEventListener("click", connectMetaMask);
+  document.getElementById("wopt-wc").addEventListener("click", connectWalletConnect);
+
+  // WalletConnect QR modal — close
+  document.getElementById("wc-modal-close").addEventListener("click", () => {
+    _closeWCModal();
+    if (_wcProvider) { try { _wcProvider.disconnect(); } catch (_) {} _wcProvider = null; }
+  });
+  document.getElementById("wc-modal-overlay").addEventListener("click", e => {
+    if (e.target === document.getElementById("wc-modal-overlay")) {
+      _closeWCModal();
+      if (_wcProvider) { try { _wcProvider.disconnect(); } catch (_) {} _wcProvider = null; }
+    }
+  });
+
+  // Copy WC URI
+  document.getElementById("wc-copy-btn").addEventListener("click", () => {
+    if (!_wcCurrentUri) return;
+    navigator.clipboard.writeText(_wcCurrentUri)
+      .then(() => toast("success", "Copied", "WalletConnect URI copied to clipboard"))
+      .catch(() => toast("warn", "Copy failed", "Use the app buttons instead"));
+  });
+
+  // Disconnect
   document.getElementById("disconnect-btn").addEventListener("click", disconnectWallet);
 
   // Modal close
