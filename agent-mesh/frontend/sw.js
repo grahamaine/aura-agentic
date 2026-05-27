@@ -1,4 +1,4 @@
-const CACHE = "aura-v4"; // bumped — clears old WalletConnect/Thirdweb cached builds
+const CACHE = "aura-v5"; // bumped — new WalletConnect + MetaMask mobile build
 const CORE  = ["/", "/index.html", "/styles.css", "/app.js", "/logo.svg", "/icon.svg", "/manifest.json"];
 
 self.addEventListener("install", e => {
