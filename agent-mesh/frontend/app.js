@@ -547,18 +547,40 @@ function setAgentFilter(cap) {
   renderAgents(document.getElementById("content"));
 }
 
+// Derive an agent's live working state from the tasks currently assigned to it.
+// Picks the most "active" task: Executing > Verifying > Assigned, else Idle.
+function agentLiveStatus(ag) {
+  const mine = state.tasks.filter(t =>
+    t.assigned && ag.id && String(t.assigned).toLowerCase() === String(ag.id).toLowerCase());
+  const inProg    = mine.find(t => t.status === 2);
+  const verifying = mine.find(t => t.status === 3);
+  const assigned  = mine.find(t => t.status === 1);
+  if (inProg)    return { key:"executing", label:"Executing", icon:"⚡", color:"var(--cyan)",   task:inProg };
+  if (verifying) return { key:"verifying", label:"Verifying", icon:"◍", color:"var(--indigo)", task:verifying };
+  if (assigned)  return { key:"assigned",  label:"Assigned",  icon:"◆", color:"var(--yellow)", task:assigned };
+  return { key:"idle", label:"Idle", icon:"●", color:"var(--green)", task:null };
+}
+
 function agentCardHTML(ag) {
   const primary = ag.caps[0] ?? 0;
   const color = CAP_COLORS[primary];
   const bg    = CAP_BG[primary];
   const repPct = (ag.rep / 1000) * 100;
+  const st = agentLiveStatus(ag);
   return `
-  <div class="agent-card" onclick="openAgentModal(state.agents.find(a=>a.id==='${ag.id}'))">
+  <div class="agent-card status-${st.key}" onclick="openAgentModal(state.agents.find(a=>a.id==='${ag.id}'))">
+    <span class="agent-status-pill" style="color:${st.color};border-color:color-mix(in srgb, ${st.color} 35%, transparent);background:color-mix(in srgb, ${st.color} 12%, transparent)">
+      <span class="asp-dot" style="background:${st.color}"></span>${st.label}
+    </span>
     <div class="agent-avatar" style="background:${bg};color:${color}">${AGENT_EMOJIS[primary]}</div>
     <div>
       <div class="agent-name">${ag.name}</div>
       <div class="agent-role">${ag.caps.map(c=>CAP_LABELS[c]).join(" · ")}</div>
     </div>
+    ${st.task ? `<div class="agent-current-task" style="border-color:color-mix(in srgb, ${st.color} 30%, transparent)">
+      <span class="act-label" style="color:${st.color}">${st.icon} ${st.key==="executing"?"Working on":st.label}</span>
+      <span class="act-title">${st.task.title}</span>
+    </div>` : ""}
     <div class="cap-chips">
       ${ag.caps.map(c=>`<span class="cap-chip" style="color:${CAP_COLORS[c]};background:${CAP_BG[c]};border-color:${CAP_COLORS[c]}40">${CAP_LABELS[c]}</span>`).join("")}
     </div>
@@ -1552,15 +1574,17 @@ function simulateBidAndAssign(taskId) {
   const agent = matchingAgents.sort((a,b)=>b.rep-a.rep)[0];
   task.assigned = agent.id;
   addEvent("info","🤝",`Task #${taskId} assigned`,`${agent.name} (rep ${agent.rep})`);
-  if (state.view === "tasks") render();
+  if (state.view === "tasks" || state.view === "agents") render();
 
   // Execute after 4–8s
   setTimeout(() => {
     task.status = 2;
     addEvent("warn","⚙️",`Task #${taskId} executing`, `${agent.name} is working...`);
+    if (state.view === "agents") render();
     setTimeout(() => {
       task.status = 3;
       addEvent("warn","🔍",`Task #${taskId} pending verify`, "Verifier-1 scoring...");
+      if (state.view === "agents") render();
       setTimeout(() => {
         const score = 65 + Math.floor(Math.random()*31);
         task.status = 4;
@@ -1570,7 +1594,7 @@ function simulateBidAndAssign(taskId) {
         recomputeMetrics();
         addEvent("success","✅",`Task #${taskId} completed`, `Score: ${score}/100 — ${task.reward.toFixed(3)} STT paid`);
         toast("success","Task Complete!",`Score ${score}/100 — ${task.reward.toFixed(3)} STT distributed`);
-        if (state.view === "tasks" || state.view === "dashboard") render();
+        if (state.view === "tasks" || state.view === "dashboard" || state.view === "agents") render();
       }, 3000);
     }, 4000 + Math.random()*4000);
   }, 1500);
@@ -1592,7 +1616,7 @@ function autoSpawnTasks() {
   recomputeMetrics();
   addEvent("info","📋",`Task #${t.id} posted`, `"${topic}" — ${reward.toFixed(3)} STT`);
   toast("info", "New Task!", `"${topic}" — ${reward.toFixed(3)} STT`);
-  if (state.view === "dashboard" || state.view === "tasks") render();
+  if (state.view === "dashboard" || state.view === "tasks" || state.view === "agents") render();
   setTimeout(() => simulateBidAndAssign(t.id), 2000 + Math.random()*3000);
 }
 
@@ -1817,17 +1841,28 @@ async function connectWalletConnect() {
     catch (_) { try { await _loadScript("https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"); } catch (_2) {} }
   }
 
-  // 2. WalletConnect EthereumProvider UMD
-  const _pkg = () => window["@walletconnect/ethereum-provider"];
-  if (!_pkg()?.EthereumProvider) {
-    try { await _loadScript("https://unpkg.com/@walletconnect/ethereum-provider@2.17.0/dist/index.umd.js"); }
-    catch (_) {
-      try { await _loadScript("https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.17.0/dist/index.umd.js"); }
-      catch (e2) { toast("error", "WalletConnect", "Failed to load. Check your connection."); return; }
+  // 2. WalletConnect EthereumProvider — load as an ES module.
+  //    The raw UMD build throws "Cannot read properties of undefined
+  //    (reading 'init')" because it can't resolve its internal
+  //    UniversalProvider dependency without a bundler. esm.sh bundles every
+  //    transitive dep, so the ESM import works where the UMD does not.
+  let EthereumProvider = window["@walletconnect/ethereum-provider"]?.EthereumProvider;
+  if (typeof EthereumProvider?.init !== "function") {
+    try {
+      const mod = await import("https://esm.sh/@walletconnect/ethereum-provider@2.17.0");
+      EthereumProvider = mod.EthereumProvider || mod.default?.EthereumProvider || mod.default;
+    } catch (e1) {
+      // Fallback: UMD (only works if a global is already present)
+      try {
+        await _loadScript("https://unpkg.com/@walletconnect/ethereum-provider@2.17.0/dist/index.umd.js");
+        EthereumProvider = window["@walletconnect/ethereum-provider"]?.EthereumProvider;
+      } catch (e2) {
+        toast("error", "WalletConnect", "Failed to load. Check your connection.");
+        return;
+      }
     }
   }
 
-  const EthereumProvider = _pkg()?.EthereumProvider;
   if (typeof EthereumProvider?.init !== "function") {
     toast("error", "WalletConnect", "Library failed to initialise. Please refresh and try again.");
     return;
@@ -1839,8 +1874,8 @@ async function connectWalletConnect() {
   try {
     const provider = await EthereumProvider.init({
       projectId:      WC_PROJECT_ID,
-      chains:         [1],
-      optionalChains: [50312],
+      chains:         [50312],   // Somnia Testnet is the required chain
+      optionalChains: [1],
       showQrModal:    false,   // we show our own modal — avoids broken internal dynamic import
       metadata: {
         name: "AuraAgentic", description: "Autonomous Agent Economy on Somnia Agentic L1",

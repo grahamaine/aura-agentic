@@ -30,6 +30,12 @@
   /* Gradients */
   --grad-brand: linear-gradient(135deg, #00d4ff 0%, #6c63ff 55%, #9333ea 100%);
   --grad-card:  linear-gradient(145deg, #131720 0%, #0d1017 100%);
+  --grad-glow:  linear-gradient(135deg, rgba(0,212,255,0.18), rgba(108,99,255,0.10) 50%, rgba(147,51,234,0.16));
+
+  /* Glass surfaces */
+  --glass:        linear-gradient(155deg, rgba(22,27,42,0.72) 0%, rgba(13,16,23,0.66) 100%);
+  --glass-border: rgba(255,255,255,0.06);
+  --glass-hi:     rgba(255,255,255,0.10);  /* inner top highlight */
 
   /* Radius */
   --r-sm: 8px;
@@ -45,9 +51,10 @@
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 
   /* Shadows */
-  --shadow-card: 0 4px 24px rgba(0,0,0,0.4);
-  --shadow-glow-cyan:   0 0 20px rgba(0,212,255,0.15);
-  --shadow-glow-indigo: 0 0 20px rgba(108,99,255,0.15);
+  --shadow-card: 0 8px 30px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.04) inset;
+  --shadow-lift: 0 18px 50px -12px rgba(0,0,0,0.65), 0 0 0 1px var(--glass-hi) inset;
+  --shadow-glow-cyan:   0 0 28px rgba(0,212,255,0.22);
+  --shadow-glow-indigo: 0 0 28px rgba(108,99,255,0.22);
 }
 
 html { font-size: 14px; }
@@ -66,6 +73,25 @@ body {
   display: flex;
   overflow: hidden;
 }
+
+/* ── Ambient aurora — soft brand glow drifting behind the whole app ─────── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(48% 42% at 15% -5%, rgba(0,212,255,0.12), transparent 60%),
+    radial-gradient(46% 40% at 102% 12%, rgba(147,51,234,0.12), transparent 58%),
+    radial-gradient(50% 48% at 50% 108%, rgba(108,99,255,0.10), transparent 60%);
+  animation: aurora-drift 18s ease-in-out infinite alternate;
+}
+@keyframes aurora-drift {
+  from { transform: translate3d(-1.5%, -1%, 0) scale(1);    opacity: 0.85; }
+  to   { transform: translate3d(1.5%, 1.5%, 0) scale(1.08); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) { body::before { animation: none; } }
 
 /* ── Sidebar ───────────────────────────────────────────────────────────── */
 .sidebar {
@@ -226,6 +252,8 @@ body {
 .main-wrapper {
   flex: 1;
   min-width: 0;           /* prevents flex blow-out on narrow screens */
+  position: relative;     /* sit above the body aurora */
+  z-index: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;       /* height is inherited from fixed body */
@@ -234,8 +262,10 @@ body {
 /* ── Topbar ────────────────────────────────────────────────────────────── */
 .topbar {
   height: 56px;
-  background: var(--bg2);
-  border-bottom: 1px solid var(--border);
+  background: rgba(10,13,20,0.72);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  border-bottom: 1px solid var(--glass-border);
   display: flex;
   align-items: center;
   gap: 12px;
@@ -539,6 +569,8 @@ body {
 /* ── Content ───────────────────────────────────────────────────────────── */
 .content {
   flex: 1;
+  position: relative;        /* sit above the body aurora */
+  z-index: 1;
   min-height: 0;              /* KEY — lets the flex child shrink below content height */
   overflow-y: scroll;         /* 'scroll' not 'auto' — always renders the scrollbar track */
   overflow-x: hidden;
@@ -594,22 +626,49 @@ body {
 
 /* ── Stat cards ────────────────────────────────────────────────────────── */
 .stat-card {
-  background: var(--grad-card);
-  border: 1px solid var(--border);
+  background: var(--glass);
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  border: 1px solid var(--glass-border);
   border-radius: var(--r-lg);
   padding: 18px 20px;
   position: relative;
   overflow: hidden;
-  transition: border-color 0.2s, transform 0.15s;
+  box-shadow: var(--shadow-card);
+  transition: transform 0.22s cubic-bezier(0.4,0,0.2,1), box-shadow 0.22s, border-color 0.22s;
 }
 
-.stat-card:hover { border-color: var(--border2); transform: translateY(-1px); }
+/* Ambient corner glow — tinted per accent via currentColor on ::after */
+.stat-card::after {
+  content: '';
+  position: absolute;
+  top: -40%; right: -25%;
+  width: 180px; height: 180px;
+  border-radius: 50%;
+  background: radial-gradient(circle, currentColor, transparent 68%);
+  opacity: 0.16;
+  pointer-events: none;
+  transition: opacity 0.22s, transform 0.22s;
+}
+.stat-card.c-cyan::after   { color: var(--cyan); }
+.stat-card.c-indigo::after { color: var(--indigo); }
+.stat-card.c-green::after  { color: var(--green); }
+.stat-card.c-purple::after { color: var(--purple); }
+.stat-card.c-yellow::after { color: var(--yellow); }
+
+.stat-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--glass-hi);
+  box-shadow: var(--shadow-lift);
+}
+.stat-card:hover::after { opacity: 0.3; transform: scale(1.15); }
 
 .stat-card::before {
   content: '';
   position: absolute;
   top: 0; left: 0; right: 0;
   height: 2px;
+  z-index: 1;
 }
 
 .stat-card.c-cyan::before   { background: linear-gradient(90deg, var(--cyan), transparent); }
@@ -618,14 +677,18 @@ body {
 .stat-card.c-purple::before { background: linear-gradient(90deg, var(--purple), transparent); }
 .stat-card.c-yellow::before { background: linear-gradient(90deg, var(--yellow), transparent); }
 
+.stat-card > * { position: relative; z-index: 1; }
+
 .stat-icon {
-  width: 36px; height: 36px;
-  border-radius: var(--r-sm);
+  width: 40px; height: 40px;
+  border-radius: 11px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.1rem;
+  font-size: 1.15rem;
   margin-bottom: 12px;
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.25);
 }
 
 .stat-icon.c-cyan   { background: rgba(0,212,255,0.12);   color: var(--cyan); }
@@ -662,10 +725,19 @@ body {
 
 /* ── Cards (generic) ───────────────────────────────────────────────────── */
 .card {
-  background: var(--bg2);
-  border: 1px solid var(--border);
+  background: var(--glass);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid var(--glass-border);
   border-radius: var(--r-lg);
   overflow: hidden;
+  box-shadow: var(--shadow-card);
+  transition: transform 0.22s cubic-bezier(0.4,0,0.2,1), box-shadow 0.22s, border-color 0.22s;
+}
+
+.card:hover {
+  border-color: var(--glass-hi);
+  box-shadow: var(--shadow-lift);
 }
 
 .card-header {
@@ -673,7 +745,7 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 16px 18px 12px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--glass-border);
 }
 
 .card-header h2 {
@@ -806,24 +878,81 @@ body {
 .agent-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
 
 .agent-card {
-  background: var(--bg2);
-  border: 1px solid var(--border);
+  background: var(--glass);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid var(--glass-border);
   border-radius: var(--r-lg);
   padding: 18px 16px;
   cursor: pointer;
-  transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+  box-shadow: var(--shadow-card);
+  transition: border-color 0.2s, transform 0.22s cubic-bezier(0.4,0,0.2,1), box-shadow 0.22s;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
   gap: 10px;
+  position: relative;
 }
 
 .agent-card:hover {
-  border-color: var(--indigo);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-glow-indigo);
+  border-color: color-mix(in srgb, var(--indigo) 55%, transparent);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lift), var(--shadow-glow-indigo);
 }
+
+/* ── Live status pill (top-right of card) ─────────────────────────────── */
+.agent-status-pill {
+  position: absolute;
+  top: 10px; right: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.54rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 20px;
+  border: 1px solid;
+}
+.asp-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.status-executing .asp-dot { animation: asp-pulse 1s ease-in-out infinite; }
+@keyframes asp-pulse {
+  0%, 100% { opacity: 1;  transform: scale(1); }
+  50%      { opacity: .35; transform: scale(1.6); }
+}
+
+/* ── Current-task box ─────────────────────────────────────────────────── */
+.agent-current-task {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--bg3);
+  border: 1px dashed;
+  border-radius: var(--r-sm);
+  padding: 7px 9px;
+  text-align: left;
+}
+.act-label {
+  font-size: 0.54rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.act-title {
+  font-size: 0.7rem;
+  color: var(--t1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Avatar status dot reflects live state ────────────────────────────── */
+.status-executing .agent-avatar::after { background: var(--cyan);   box-shadow: 0 0 7px var(--cyan);   animation: asp-pulse 1s ease-in-out infinite; }
+.status-verifying .agent-avatar::after { background: var(--indigo); box-shadow: 0 0 7px var(--indigo); }
+.status-assigned  .agent-avatar::after { background: var(--yellow); box-shadow: 0 0 7px var(--yellow); }
 
 .agent-avatar {
   width: 56px; height: 56px;
@@ -1614,14 +1743,19 @@ body {
   margin-bottom: 16px;
 }
 .net-intel-stat {
-  background: var(--bg3);
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  padding: 10px 12px;
+  background: var(--glass);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-md);
+  padding: 12px 12px;
   text-align: center;
+  box-shadow: var(--shadow-card);
+  transition: transform 0.2s, border-color 0.2s;
 }
-.nis-val   { font-size: 0.9rem; font-weight: 800; margin-bottom: 2px; }
-.nis-label { font-size: 0.6rem; color: var(--t2); }
+.net-intel-stat:hover { transform: translateY(-2px); border-color: var(--glass-hi); }
+.nis-val   { font-size: 1rem; font-weight: 800; margin-bottom: 3px; letter-spacing: 0.01em; }
+.nis-label { font-size: 0.58rem; color: var(--t2); text-transform: uppercase; letter-spacing: 0.07em; }
 
 /* ── Task progress tracker ─────────────────────────────────────────────────── */
 .tracker-row {

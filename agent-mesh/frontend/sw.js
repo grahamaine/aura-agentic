@@ -1,4 +1,4 @@
-const CACHE = "aura-v5"; // bumped — new WalletConnect + MetaMask mobile build
+const CACHE = "aura-v6"; // bumped — WalletConnect ESM loader fix
 const CORE  = ["/", "/index.html", "/styles.css", "/app.js", "/logo.svg", "/icon.svg", "/manifest.json"];
 
 self.addEventListener("install", e => {
@@ -19,7 +19,9 @@ self.addEventListener("fetch", e => {
   const url = e.request.url;
   // Pass through: RPC calls, external CDN, Google Fonts
   if (url.includes("somnia.network") || url.includes("googleapis") ||
-      url.includes("cloudflare") || url.includes("gstatic")) return;
+      url.includes("cloudflare") || url.includes("gstatic") ||
+      url.includes("esm.sh") || url.includes("unpkg.com") ||
+      url.includes("jsdelivr.net")) return;
 
   e.respondWith(
     caches.match(e.request).then(cached => {
